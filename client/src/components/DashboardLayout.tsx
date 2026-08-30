@@ -21,16 +21,21 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, PanelLeft, Users } from "lucide-react";
+import { Building2, FileText, LayoutDashboard, LogOut, PanelLeft, Users, WalletCards } from "lucide-react";
+import type { RoleKey } from "../../../drizzle/schema";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
-const menuItems = [
-  { icon: LayoutDashboard, label: "Page 1", path: "/" },
-  { icon: Users, label: "Page 2", path: "/some-path" },
-];
+const menuItemsByRole: Record<RoleKey, Array<{ icon: typeof LayoutDashboard; label: string; path: string }>> = {
+  SUPER_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/platform" }, { icon: Building2, label: "Empresas", path: "/platform" }, { icon: Users, label: "Usuarios", path: "/platform" }],
+  COMPANY_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/company" }, { icon: Building2, label: "Empresa", path: "/company" }, { icon: Users, label: "Usuarios", path: "/company" }],
+  HR: [{ icon: LayoutDashboard, label: "Dashboard", path: "/hr" }, { icon: Users, label: "Empleados", path: "/hr" }, { icon: FileText, label: "Documentos", path: "/hr" }],
+  FINANCE: [{ icon: LayoutDashboard, label: "Dashboard", path: "/finance" }, { icon: WalletCards, label: "Costos", path: "/finance" }, { icon: FileText, label: "Reportes", path: "/finance" }],
+  MANAGER: [{ icon: LayoutDashboard, label: "Dashboard", path: "/manager" }, { icon: Users, label: "Mi equipo", path: "/manager" }, { icon: FileText, label: "Solicitudes", path: "/manager" }],
+  EMPLOYEE: [{ icon: LayoutDashboard, label: "Inicio", path: "/employee" }, { icon: Users, label: "Mi perfil", path: "/employee" }, { icon: FileText, label: "Mis solicitudes", path: "/employee" }],
+};
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -106,6 +111,8 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const role = (user?.role === "admin" ? "SUPER_ADMIN" : "COMPANY_ADMIN") as RoleKey;
+  const menuItems = menuItemsByRole[role];
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
@@ -169,7 +176,7 @@ function DashboardLayoutContent({
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="font-semibold tracking-tight truncate">
-                    Navigation
+                    PEOPLE AI
                   </span>
                 </div>
               ) : null}
@@ -224,7 +231,7 @@ function DashboardLayoutContent({
                   className="cursor-pointer text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sign out</span>
+                  <span>Cerrar sesión</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
