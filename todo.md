@@ -179,7 +179,7 @@
 - [x] Ejecutar la suite heredada y la nueva cobertura mailto y dominio, con 27 pruebas totales, TypeScript y build.
 - [x] Verificar regresiones de ZIP, OTP, enlaces, recordatorios, notificaciones, auditoría, RBAC y multi-tenancy mediante suite completa y guards.
 - [x] Documentar que la navegación responsive autenticada queda pendiente manual si no puede verificarse sin login.
-- [ ] Guardar checkpoint final sin avanzar a Fase 4.
+- [x] Guardar checkpoint final sin avanzar a Fase 4.
 
 ## Validación específica mailto
 
