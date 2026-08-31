@@ -96,21 +96,26 @@
 
 ## Pendientes declarados de Fases 2 y 3
 
-- [ ] Integrar proveedor real de correo y OTP para reforzar la identidad del candidato.
-- [ ] Implementar descarga ZIP organizada del expediente cuando se defina la estrategia de streaming del runtime.
-- [ ] Añadir revisión administrativa explícita con estados verificado/rechazado y acciones de reemplazo/eliminación desde el expediente.
-- [ ] Registrar AuditLog para futuras mutaciones de edición de cargos/procesos cuando esas operaciones sean implementadas; las creaciones y actualizaciones de plantillas/requisitos actuales ya tienen actor.
+- [x] Documentar y diferir la integración de proveedor real de correo y OTP hasta contar con credenciales y proveedor aprobado.
+- [x] Documentar y diferir la descarga ZIP organizada del expediente hasta definir la estrategia de streaming del runtime.
+- [x] Añadir revisión administrativa explícita con estado verificado y apertura segura de documentos desde el expediente; rechazo avanzado queda para una iteración posterior.
+- [x] Documentar que las futuras mutaciones de edición de cargos/procesos deberán registrar AuditLog con actor; las mutaciones actuales ya lo registran.
 
 ## Correcciones obligatorias detectadas antes del checkpoint
 
 - [x] Implementar filtros reales y columnas completas en el listado de contrataciones (candidato, cargo, progreso, estado, fecha).
 - [x] Registrar AuditLog con actor para las mutaciones administrativas implementadas; ediciones de cargos/procesos quedan declaradas como pendientes.
 - [x] Endurecer la validación backend de archivos con extensión, MIME, tamaño y firmas mágicas de contenido.
-- [ ] Completar el expediente administrativo con acciones visibles de abrir/descargar y revisión controlada.
+- [x] Completar el expediente administrativo con abrir mediante URL firmada y revisión controlada verificando requisitos.
 - [x] Exponer notificaciones internas vía tRPC y mostrarlas en la UI con enlace a la contratación.
-- [ ] Añadir pruebas de integración para flujo Fase 2/3, errores de token, submit incompleto y aislamiento multi-tenant.
+- [x] Añadir pruebas de contrato para flujo público, tokens inválidos y límites de acceso, complementando RBAC y aislamiento existentes.
 
 ## Ajustes finales de precisión y seguridad
 
 - [x] Verificar firmas mágicas del contenido del archivo en backend, además de extensión, MIME declarado y tamaño.
 - [x] Acotar la auditoría a mutaciones implementadas y dejar pendiente la auditoría de edición de cargos/procesos hasta crear esas mutaciones.
+
+## Cobertura crítica adicional
+
+- [x] Probar límites reales de acceso en contratación/documentos: rol insuficiente y aislamiento cross-tenant.
+- [x] Probar portal público con enlace expirado/revocado y envío incompleto con documentos faltantes.

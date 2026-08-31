@@ -56,7 +56,7 @@ La validación de archivo se ejecuta en backend y frontend: tamaño, MIME declar
 
 | Comando | Resultado |
 |---|---|
-| `pnpm test` | 3 archivos, 9 pruebas exitosas |
+| `pnpm test` | 4 archivos, 14 pruebas exitosas |
 | `pnpm check` | TypeScript sin errores |
 | `pnpm build` | Build de cliente y servidor exitoso |
 | Verificación visual | HR, cargos y contrataciones revisados en escritorio; portal responsive preparado |
@@ -67,7 +67,7 @@ El build muestra una advertencia de chunk JavaScript superior a 500 KB, pero no 
 
 ## Pendientes declarados
 
-El correo real y OTP requieren un proveedor externo configurado; no se simuló ningún envío. La generación de ZIP organizado requiere una decisión de streaming/runtime y no se presenta como funcional. La revisión administrativa avanzada con estados explícitos `verified` o `rejected`, así como botones administrativos completos de reemplazo/eliminación, queda para una iteración operativa posterior. La auditoría de enlace, carga, eliminación y envío está conectada; la auditoría con usuario actor para cada mutation administrativa debe ampliarse cuando se formalice el contexto de actor.
+El correo real y OTP requieren un proveedor externo configurado; no se simuló ningún envío. La generación de ZIP organizado requiere una decisión de streaming/runtime y no se presenta como funcional. La revisión administrativa incluye marcado `verified` y apertura segura; el estado `rejected`, reemplazo y eliminación desde la vista administrativa quedan para una iteración operativa posterior. La auditoría de enlace, carga, eliminación y envío está conectada; la auditoría con usuario actor para cada mutation administrativa debe ampliarse cuando se formalice el contexto de actor.
 
 ## Flujo verificable
 
