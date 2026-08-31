@@ -1,0 +1,19 @@
+import DashboardLayout from "@/components/DashboardLayout";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useRoute } from "wouter";
+import { ArrowLeft, CheckCircle2, Copy, Link2, FileText } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import { trpc } from "@/lib/trpc";
+
+export default function HiringDetailPage() {
+  const [, params] = useRoute("/hr/contrataciones/:id"); const processId = Number(params?.id || 0); const companyId = 4; const [link, setLink] = useState("");
+  const detail = trpc.hiring.detail.useQuery({ companyId, processId }, { enabled: processId > 0 });
+  const generate = trpc.hiring.generateLink.useMutation({ onSuccess: data => { const url = `${window.location.origin}/candidate/documents/${data.token}`; setLink(url); toast.success("Enlace seguro generado"); } });
+  if (detail.isLoading) return <DashboardLayout roleOverride="HR"><div className="p-8 text-sm text-slate-500">Cargando expediente…</div></DashboardLayout>;
+  if (!detail.data) return <DashboardLayout roleOverride="HR"><div className="p-8 text-sm text-rose-600">Contratación no encontrada para este tenant.</div></DashboardLayout>;
+  const { process, candidate, requirements, documents } = detail.data; const received = requirements.filter(r => ["uploaded", "replaced", "verified"].includes(r.status)).length;
+  return <DashboardLayout roleOverride="HR"><div className="mx-auto max-w-6xl space-y-6"><button onClick={() => history.back()} className="flex items-center text-sm text-slate-500 hover:text-slate-900"><ArrowLeft className="mr-2 h-4 w-4" />Volver a contrataciones</button><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Expediente digital</p><h1 className="mt-2 text-3xl font-semibold">{candidate?.fullName}</h1><p className="mt-2 text-sm text-slate-500">Proceso #{process.id} · Cargo #{process.positionId}</p></div><Badge variant="outline">{process.status === "in_review" ? "En revisión" : process.status}</Badge></div><div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]"><Card><CardHeader><CardTitle className="text-base">Documentos requeridos</CardTitle><p className="text-sm text-slate-500">{received}/{requirements.length} documentos recibidos</p></CardHeader><CardContent className="space-y-3">{requirements.map(req => { const doc = documents.find(d => d.requirementId === req.id); return <div key={req.id} className="flex items-center gap-3 rounded-xl border p-4"><FileText className="h-4 w-4 text-blue-600" /><div className="flex-1"><p className="text-sm font-medium">{req.title}</p><p className="text-xs text-slate-500">{doc ? `${doc.normalizedName} · ${Math.round(doc.sizeBytes / 1024)} KB` : req.required ? "Pendiente · obligatorio" : "Pendiente · opcional"}</p></div>{doc ? <CheckCircle2 className="h-5 w-5 text-teal-500" /> : <Badge variant="outline">Pendiente</Badge>}</div>})}</CardContent></Card><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" />Enlace del candidato</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm text-slate-500">Genera un enlace opaco con expiración de 7 días. No incluye datos personales ni companyId.</p><Button disabled={generate.isPending} onClick={() => generate.mutate({ companyId, processId })} className="w-full bg-slate-950 text-white">Generar enlace seguro</Button>{link && <div className="flex gap-2"><input readOnly value={link} className="min-w-0 flex-1 rounded-lg border bg-slate-50 px-3 text-xs" /><Button size="icon" variant="outline" onClick={() => navigator.clipboard.writeText(link).then(() => toast.success("Enlace copiado"))}><Copy className="h-4 w-4" /></Button></div>}</CardContent></Card></div></div></DashboardLayout>;
+}

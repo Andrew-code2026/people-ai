@@ -76,3 +76,41 @@
 - [x] Separar implementación de esta fase frente a IA documental, WhatsApp, Teams y otras exclusiones.
 - [x] Preparar un plan técnico priorizado y criterios de aceptación ejecutables.
 - [x] Documentar y entregar el análisis de la Fase 3 sin implementarla todavía.
+
+## Implementación acumulada Fases 2 y 3
+
+- [x] Implementar cargos, plantillas y documentos de plantilla por empresa.
+- [x] Implementar snapshot editable de requisitos por contratación.
+- [x] Implementar creación, listado filtrable y detalle de contrataciones.
+- [x] Implementar auditoría de las mutaciones administrativas existentes y validaciones backend para Fase 2.
+- [x] Implementar enlaces seguros con hash, expiración, revocación y auditoría.
+- [x] Implementar portal público de candidato sin cuenta normal.
+- [x] Implementar carga individual privada con validación de MIME, extensión y tamaño.
+- [x] Implementar reemplazo, eliminación, progreso y envío final bloqueado por faltantes.
+- [x] Implementar renombrado normalizado conservando nombre original y metadata.
+- [x] Implementar expediente administrativo base y descarga segura mediante URL firmada.
+- [x] Implementar notificaciones internas por documentación completa.
+- [x] Añadir pruebas unitarias críticas de Fase 2 y Fase 3 para helpers, seguridad y aislamiento.
+- [x] Ejecutar TypeScript, tests y build y corregir errores.
+- [x] Documentar implementación, pendientes reales y límites técnicos sin avanzar a Fase 4.
+
+## Pendientes declarados de Fases 2 y 3
+
+- [ ] Integrar proveedor real de correo y OTP para reforzar la identidad del candidato.
+- [ ] Implementar descarga ZIP organizada del expediente cuando se defina la estrategia de streaming del runtime.
+- [ ] Añadir revisión administrativa explícita con estados verificado/rechazado y acciones de reemplazo/eliminación desde el expediente.
+- [ ] Registrar AuditLog para futuras mutaciones de edición de cargos/procesos cuando esas operaciones sean implementadas; las creaciones y actualizaciones de plantillas/requisitos actuales ya tienen actor.
+
+## Correcciones obligatorias detectadas antes del checkpoint
+
+- [x] Implementar filtros reales y columnas completas en el listado de contrataciones (candidato, cargo, progreso, estado, fecha).
+- [x] Registrar AuditLog con actor para las mutaciones administrativas implementadas; ediciones de cargos/procesos quedan declaradas como pendientes.
+- [x] Endurecer la validación backend de archivos con extensión, MIME, tamaño y firmas mágicas de contenido.
+- [ ] Completar el expediente administrativo con acciones visibles de abrir/descargar y revisión controlada.
+- [x] Exponer notificaciones internas vía tRPC y mostrarlas en la UI con enlace a la contratación.
+- [ ] Añadir pruebas de integración para flujo Fase 2/3, errores de token, submit incompleto y aislamiento multi-tenant.
+
+## Ajustes finales de precisión y seguridad
+
+- [x] Verificar firmas mágicas del contenido del archivo en backend, además de extensión, MIME declarado y tamaño.
+- [x] Acotar la auditoría a mutaciones implementadas y dejar pendiente la auditoría de edición de cargos/procesos hasta crear esas mutaciones.

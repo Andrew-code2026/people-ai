@@ -22,6 +22,13 @@
       "when": 1788135505218,
       "tag": "0002_military_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1788138208510,
+      "tag": "0003_rapid_jetstream",
+      "breakpoints": true
     }
   ]
 }
