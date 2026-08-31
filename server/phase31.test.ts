@@ -1,8 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { communicationAuditAction, createZipArchive, buildCandidateEmail, hashOtp, isExpiringWithin, isLinkUsable, isOtpUsable, isReminderAllowed } from "./hrDomain";
-import { isEmailProviderConfigured, sendTransactionalEmail } from "./emailService";
-
-afterEach(() => { delete process.env.RESEND_API_KEY; delete process.env.RESEND_FROM_EMAIL; delete process.env.PUBLIC_APP_URL; vi.restoreAllMocks(); });
+import { describe, expect, it } from "vitest";
+import { buildManualCommunicationRecord, communicationAuditAction, createZipArchive, buildCandidateEmail, hashOtp, isExpiringWithin, isLinkUsable, isOtpUsable, isReminderAllowed, manualCommunicationEvents } from "./hrDomain";
+import { buildMailtoUrl, prepareMailtoEmail } from "./emailService";
 
 describe("Fase 3.1 - OTP", () => {
   it("only stores a deterministic hash and accepts active challenges", () => {
@@ -46,17 +44,28 @@ describe("Fase 3.1 - correo transaccional", () => {
     expect(email.html).toContain("https://people.example/candidate/documents/token-demo");
   });
 
-  it("sends through the configured provider contract with a mocked transport", async () => {
-    process.env.RESEND_API_KEY = "test-key"; process.env.RESEND_FROM_EMAIL = "hr@example.test";
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: "email-demo-1" }), { status: 200, headers: { "Content-Type": "application/json" } })));
-    const result = await sendTransactionalEmail({ to: "candidate@example.test", subject: "Demo", text: "Demo", html: "<p>Demo</p>" });
-    expect(result).toEqual({ status: "sent", providerMessageId: "email-demo-1" });
-    expect(fetch).toHaveBeenCalledWith("https://api.resend.com/emails", expect.objectContaining({ method: "POST" }));
+  it("prepares a mailto draft without sending or requiring a provider", () => {
+    const draft = prepareMailtoEmail({ to: "candidate@example.test", subject: "Demo", text: "Hola candidata", html: "<p>Hola candidata</p>" });
+    expect(draft.status).toBe("prepared");
+    expect(draft.mailtoUrl).toBe(buildMailtoUrl({ to: "candidate@example.test", subject: "Demo", text: "Hola candidata" }));
+    expect(decodeURIComponent(draft.mailtoUrl)).toContain("candidate@example.test");
+    expect(decodeURIComponent(draft.mailtoUrl.replace(/\+/g, " "))).toContain("Hola candidata");
   });
 
-  it("reports no configurado and never pretends to send without provider credentials", async () => {
-    expect(isEmailProviderConfigured()).toBe(false);
-    const result = await sendTransactionalEmail({ to: "candidate@example.test", subject: "Demo", text: "Demo", html: "<p>Demo</p>" });
-    expect(result).toEqual({ status: "not_configured", errorMessage: "RESEND_API_KEY y RESEND_FROM_EMAIL no están configuradas." });
+  it("records manual send separately from draft preparation", () => {
+    const now = new Date("2026-08-31T00:00:00Z");
+    const record = buildManualCommunicationRecord("reminder", "candidate@example.test", "Recordatorio", now, 4);
+    expect(record.status).toBe("sent");
+    expect(record.sentAt).toBe(now);
+    expect(record.cooldownUntil).toEqual(new Date("2026-08-31T04:00:00Z"));
+    expect(manualCommunicationEvents("initial")).toEqual({ activity: "link_sent", audit: "candidate_initial_sent" });
+    expect(manualCommunicationEvents("reminder")).toEqual({ activity: "communication_reminder_sent", audit: "candidate_reminder_sent" });
+  });
+
+  it("encodes recipient, subject and body safely in mailto", () => {
+    const url = buildMailtoUrl({ to: "candidate@example.test", subject: "Documentación & proceso", text: "Línea 1\nLínea 2" });
+    expect(url.startsWith("mailto:candidate%40example.test?")).toBe(true);
+    expect(decodeURIComponent(url.replace(/\+/g, " "))).toContain("Documentación & proceso");
+    expect(decodeURIComponent(url.replace(/\+/g, " "))).toContain("Línea 1\nLínea 2");
   });
 });

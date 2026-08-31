@@ -9,9 +9,10 @@ function unauthenticatedContext(): TrpcContext {
 describe("Fase 3.1 tRPC guards", () => {
   it("blocks protected communication, alert and ZIP procedures without a session", async () => {
     const caller = appRouter.createCaller(unauthenticatedContext());
-    await expect(caller.hiring.sendEmail({ companyId: 1, processId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.hiring.prepareEmail({ companyId: 1, processId: 1, portalUrl: "https://people.example/candidate/documents/token-demo" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(caller.hiring.expiringLinks({ companyId: 1, withinHours: 24 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
     await expect(caller.hiring.downloadZip({ companyId: 1, processId: 1 })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.hiring.markCommunicationSent({ companyId: 1, processId: 1, type: "initial", portalUrl: "https://people.example/candidate/documents/token-demo" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
   });
 
   it("rejects malformed public tokens before accessing candidate data", async () => {

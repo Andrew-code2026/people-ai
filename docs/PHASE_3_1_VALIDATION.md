@@ -21,20 +21,20 @@ La validación se ejecutó sin iniciar sesión manualmente en el navegador de ve
 | Auditoría | Implementada | Enlaces, comunicaciones, OTP, documentos, envío y descarga registran actor o contexto de candidato |
 | RBAC y multi-tenancy | Implementada | Todas las rutas administrativas verifican rol y `companyId`; el portal usa el tenant resuelto por hash del enlace |
 | OTP | Preparado, no activo | Hash, expiración, cinco intentos e invalidación persistidos; la solicitud devuelve `not_configured` sin mostrar ni fingir código |
-| Correo sin proveedor | Implementada | Devuelve `not_configured`, registra error, no registra envío exitoso y no genera enlace por correo |
-| Correo con proveedor | Verificado con mock | Resend se prueba mediante transporte simulado; se valida contrato y respuesta `sent` sin red externa |
-| Plantilla de correo | Implementada | Incluye candidato, cargo, empresa y URL `/candidate/documents/{token}`; HTML escapa contenido dinámico |
+| Correo sin proveedor | Sustituida por mailto | No se consultan credenciales ni proveedores; se prepara un borrador local y no se registra envío hasta la acción manual |
+| Correo con proveedor | Fuera de alcance | No se utiliza ningún proveedor automático en esta modalidad; la analista envía desde Gmail, Outlook u otro cliente configurado. Resend ya no participa en este flujo |
+| Plantilla de correo | Implementada como borrador mailto | Incluye candidato, cargo, empresa y URL `/candidate/documents/{token}`; HTML/text escapan contenido dinámico y el cliente local se abre con `mailto:` |
 
 ## Validaciones ejecutadas
 
-`pnpm check` terminó correctamente sin errores de TypeScript. `pnpm test` terminó con **23 pruebas exitosas en 6 archivos**, incluyendo guards de procedimientos tRPC para comunicación, alertas y ZIP. `pnpm build` terminó correctamente para frontend y servidor. El build muestra únicamente la advertencia informativa de chunks JavaScript mayores a 500 kB.
+`pnpm check` terminó correctamente sin errores de TypeScript. `pnpm test` terminó con **27 pruebas exitosas en 7 archivos**, incluyendo guards de procedimientos tRPC, construcción y codificación `mailto:`, el contrato de registro manual de comunicación y las pruebas de dominio que confirman que preparar documentación o recordatorios no persiste envíos exitosos. `pnpm build` terminó correctamente para frontend y servidor. El build muestra únicamente la advertencia informativa de chunks JavaScript mayores a 500 kB.
 
 ## Pruebas no ejecutables sin sesión real
 
 No se pudo completar manualmente la navegación autenticada en el navegador porque el formulario no aceptó correctamente el carácter `@`. Por esa razón quedan pendientes de verificación manual la interacción real de la analista con el dashboard protegido, el clic sobre cada control desde una sesión OAuth persistida y la descarga ZIP contra objetos reales de storage. Ninguna de estas limitaciones altera el resultado de las pruebas automatizadas.
 
-Las notificaciones internas se generan cuando el candidato envía documentación; las alertas de enlaces próximos a expirar son deliberadamente visuales en el dashboard y no simulan una notificación automática. Los procedimientos administrativos de comunicación, alertas y ZIP tienen cobertura de bloqueo sin sesión. Tampoco se realizó una prueba contra Resend real. Para producción se requieren `RESEND_API_KEY`, `RESEND_FROM_EMAIL` y `PUBLIC_APP_URL`; mientras falten, la aplicación debe permanecer en estado explícito de correo no configurado.
+Las notificaciones internas se generan cuando el candidato envía documentación; las alertas de enlaces próximos a expirar son deliberadamente visuales en el dashboard y no simulan una notificación automática. Los procedimientos administrativos de comunicación, alertas y ZIP tienen cobertura de bloqueo sin sesión. El flujo de correo de la demo no requiere Resend, API keys ni `PUBLIC_APP_URL`: prepara un borrador local con `mailto:` y solo registra envío cuando la analista pulsa explícitamente “Marcar como enviado”.
 
 ## Pendientes reales
 
-La entrega no avanza a la Fase 4. Permanecen diferidos la activación de OTP con proveedor de correo o SMS, la entrega ZIP mediante streaming si los expedientes crecen significativamente y la prueba manual autenticada del flujo completo. El proveedor real debe habilitarse únicamente después de configurar y verificar credenciales y dominio remitente.
+La entrega no avanza a la Fase 4. Permanecen diferidos la activación de OTP con proveedor de correo o SMS, la entrega ZIP mediante streaming si los expedientes crecen significativamente, la prueba manual autenticada del flujo completo y la verificación del comportamiento del cliente Gmail/Outlook en un dispositivo real. Resend ya no es necesario para el correo de la demo.

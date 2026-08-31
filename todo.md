@@ -167,3 +167,33 @@
 - [x] Documentar formalmente que Fase 3.1 reutiliza procesos demo previos y genera comunicaciones/actividad/alertas/OTP bajo demanda, sin seed ficticio adicional.
 - [x] Añadir pruebas de procedimientos tRPC Fase 3.1 para guards de comunicación, alertas, ZIP y tokens inválidos; los flujos con DB/storage quedan cubiertos por helpers y pendientes manuales.
 - [x] Dejar marcada como pendiente manual la responsive de las rutas protegidas mientras el login del navegador siga bloqueado.
+
+## Corrección de correo Fase 3.1 — mailto
+
+- [x] Auditar el flujo actual de Resend y confirmar qué debe conservarse o retirarse.
+- [x] Crear contrato de correo preparado con destinatario, asunto, cuerpo, candidato, cargo, empresa y enlace seguro.
+- [x] Sustituir el envío automático por apertura de cliente mediante mailto, sin afirmar envío exitoso.
+- [x] Añadir acción protegida “Marcar como enviado” con historial, actividad y AuditLog.
+- [x] Eliminar la dependencia visible de Resend del flujo demo sin afectar otras arquitecturas.
+- [x] Añadir pruebas de mailto, marcado manual, no falsos éxitos y efectos de dominio simulados.
+- [x] Ejecutar la suite heredada y la nueva cobertura mailto y dominio, con 27 pruebas totales, TypeScript y build.
+- [x] Verificar regresiones de ZIP, OTP, enlaces, recordatorios, notificaciones, auditoría, RBAC y multi-tenancy mediante suite completa y guards.
+- [x] Documentar que la navegación responsive autenticada queda pendiente manual si no puede verificarse sin login.
+- [ ] Guardar checkpoint final sin avanzar a Fase 4.
+
+## Validación específica mailto
+
+- [x] Añadir prueba tRPC de bloqueo para marcar comunicación como enviada sin sesión.
+- [x] Dejar como pendiente manual la verificación de Gmail/Outlook y responsive de rutas autenticadas, sin bloquear la entrega.
+
+## Cobertura adicional del cambio mailto
+
+- [x] Añadir prueba de dominio para preparar correo sin registro exitoso y para registrar manualmente comunicación, actividad y auditoría.
+- [x] Ajustar documentación y checklist para reflejar 27 pruebas totales con cobertura mailto y de dominio.
+
+## Pruebas de dominio de comunicación mailto
+
+- [x] Añadir prueba de dominio para prepareCandidateEmail/prepareCandidateReminder confirmando que preparar no inserta comunicación exitosa ni auditoría.
+- [x] Añadir prueba de dominio para markCommunicationSent verificando communicationLogs, processActivities y AuditLog con actor correcto.
+
+- [x] Añadir prueba de dominio para prepareCandidateReminder confirmando que no inserta comunicación, actividad ni auditoría.
