@@ -57,3 +57,12 @@
 - [x] Guardar un checkpoint nuevo posterior a la validación de esta reestructuración.
 
 - [x] Guardar checkpoint final tras la reestructuración HR y la validación de TypeScript, Vitest y las vistas HR específicas.
+
+## Fase 2 — análisis y planificación
+
+- [x] Leer y analizar completamente pasted_content_3.txt.
+- [x] Comparar los requisitos de la Fase 2 con la arquitectura y funcionalidades actuales.
+- [x] Identificar dependencias, riesgos de seguridad, datos, integraciones y escalabilidad.
+- [x] Separar funcionalidades implementables ahora de extensiones que requieren preparación o decisiones del usuario.
+- [x] Definir un plan técnico priorizado para implementar la Fase 2 sin romper la Fase 1.
+- [x] Entregar un documento de análisis de la Fase 2 con criterios de aceptación y próximos pasos.
