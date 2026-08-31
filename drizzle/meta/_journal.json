@@ -43,6 +43,13 @@
       "when": 1788140948425,
       "tag": "0005_silly_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1788217856462,
+      "tag": "0006_pale_hellfire_club",
+      "breakpoints": true
     }
   ]
 }

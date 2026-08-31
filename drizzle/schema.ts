@@ -193,10 +193,97 @@ export const candidateOtpChallenges = mysqlTable("candidate_otp_challenges", {
   id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), codeHash: varchar("codeHash", { length: 128 }).notNull(), expiresAt: timestamp("expiresAt").notNull(), attempts: int("attempts").default(0).notNull(), maxAttempts: int("maxAttempts").default(5).notNull(), invalidatedAt: timestamp("invalidatedAt"), verifiedAt: timestamp("verifiedAt"), createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (table) => ({ companyIdx: index("otp_company_idx").on(table.companyId), processIdx: index("otp_process_idx").on(table.processId) }));
 
+export const aiAnalysisRuns = mysqlTable("ai_analysis_runs", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  processId: int("processId").notNull(),
+  requestedByUserId: int("requestedByUserId").notNull(),
+  providerMode: mysqlEnum("providerMode", ["demo", "real"]).default("demo").notNull(),
+  status: mysqlEnum("status", ["queued", "running", "completed", "failed"]).default("queued").notNull(),
+  sourceDocumentId: int("sourceDocumentId"),
+  summary: text("summary"),
+  errorMessage: varchar("errorMessage", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  completedAt: timestamp("completedAt"),
+}, (table) => ({ companyIdx: index("ai_runs_company_idx").on(table.companyId), processIdx: index("ai_runs_process_idx").on(table.processId) }));
+
+export const aiDocumentFindings = mysqlTable("ai_document_findings", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  processId: int("processId").notNull(),
+  analysisRunId: int("analysisRunId").notNull(),
+  documentId: int("documentId"),
+  requirementId: int("requirementId"),
+  sourcePageStart: int("sourcePageStart"),
+  sourcePageEnd: int("sourcePageEnd"),
+  detectedType: varchar("detectedType", { length: 180 }).notNull(),
+  suggestedName: varchar("suggestedName", { length: 255 }),
+  confidence: int("confidence").notNull(),
+  status: mysqlEnum("status", ["identified", "review_required", "confirmed", "corrected", "rejected"]).default("identified").notNull(),
+  issueType: varchar("issueType", { length: 80 }),
+  issueMessage: varchar("issueMessage", { length: 500 }),
+  extractedData: text("extractedData"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ companyIdx: index("ai_findings_company_idx").on(table.companyId), processIdx: index("ai_findings_process_idx").on(table.processId), runIdx: index("ai_findings_run_idx").on(table.analysisRunId) }));
+
+export const aiConversations = mysqlTable("ai_conversations", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  userId: int("userId").notNull(),
+  processId: int("processId"),
+  title: varchar("title", { length: 180 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ companyIdx: index("ai_conversations_company_idx").on(table.companyId), userIdx: index("ai_conversations_user_idx").on(table.userId), processIdx: index("ai_conversations_process_idx").on(table.processId) }));
+
+export const aiConversationMessages = mysqlTable("ai_conversation_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  conversationId: int("conversationId").notNull(),
+  userId: int("userId"),
+  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
+  content: text("content").notNull(),
+  model: varchar("model", { length: 120 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ companyIdx: index("ai_messages_company_idx").on(table.companyId), conversationIdx: index("ai_messages_conversation_idx").on(table.conversationId) }));
+
+export const aiInsights = mysqlTable("ai_insights", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  processId: int("processId"),
+  type: varchar("type", { length: 80 }).notNull(),
+  title: varchar("title", { length: 180 }).notNull(),
+  description: text("description").notNull(),
+  severity: mysqlEnum("severity", ["info", "warning", "critical", "success"]).default("info").notNull(),
+  status: mysqlEnum("status", ["unread", "read", "reviewed", "resolved"]).default("unread").notNull(),
+  dedupeKey: varchar("dedupeKey", { length: 220 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  resolvedAt: timestamp("resolvedAt"),
+}, (table) => ({ companyIdx: index("ai_insights_company_idx").on(table.companyId), processIdx: index("ai_insights_process_idx").on(table.processId), dedupeIdx: uniqueIndex("ai_insights_company_dedupe_idx").on(table.companyId, table.dedupeKey) }));
+
+export const aiHiringSummaries = mysqlTable("ai_hiring_summaries", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  processId: int("processId").notNull(),
+  summary: text("summary").notNull(),
+  dataFingerprint: varchar("dataFingerprint", { length: 128 }).notNull(),
+  model: varchar("model", { length: 120 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ companyIdx: index("ai_summaries_company_idx").on(table.companyId), processIdx: uniqueIndex("ai_summaries_process_idx").on(table.companyId, table.processId) }));
+
 export const companyCommunicationSettings = mysqlTable("company_communication_settings", {
   id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull().unique(), senderName: varchar("senderName", { length: 160 }).default("Equipo de Talento Humano").notNull(), senderEmail: varchar("senderEmail", { length: 320 }), logoUrl: varchar("logoUrl", { length: 500 }), signature: text("signature"), subjectTemplate: varchar("subjectTemplate", { length: 240 }), bodyTemplate: text("bodyTemplate"), reminderTemplate: text("reminderTemplate"), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export type AiAnalysisRun = typeof aiAnalysisRuns.$inferSelect;
+export type AiDocumentFinding = typeof aiDocumentFindings.$inferSelect;
+export type AiConversation = typeof aiConversations.$inferSelect;
+export type AiConversationMessage = typeof aiConversationMessages.$inferSelect;
+export type AiInsight = typeof aiInsights.$inferSelect;
+export type AiHiringSummary = typeof aiHiringSummaries.$inferSelect;
 export type CandidateOtpChallenge = typeof candidateOtpChallenges.$inferSelect;
 export type CommunicationLog = typeof communicationLogs.$inferSelect;
 export type ProcessActivity = typeof processActivities.$inferSelect;

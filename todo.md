@@ -197,3 +197,36 @@
 - [x] Añadir prueba de dominio para markCommunicationSent verificando communicationLogs, processActivities y AuditLog con actor correcto.
 
 - [x] Añadir prueba de dominio para prepareCandidateReminder confirmando que no inserta comunicación, actividad ni auditoría.
+
+## Fase 4A — IA documental y People AI Assistant
+
+- [x] Documentar el análisis de la especificación de Fase 4A y su integración incremental con Fases 1–3.1.
+- [x] Diseñar entidades tenant-scoped para análisis documental, hallazgos, revisiones humanas, alertas, resúmenes y conversaciones.
+- [x] Extender la abstracción AIProvider/servicio AI sin exponer credenciales ni acoplar la aplicación a un proveedor.
+- [x] Implementar análisis documental estructurado con modo DEMO explícito y proveedor real configurable, sin inventar resultados.
+- [x] Implementar identificación, clasificación, confianza, requisitos faltantes, inconsistencias y solicitud de revisión humana.
+- [x] Preparar separación de PDF cuando sea técnicamente posible, conservando siempre el original y sin destruir storage.
+- [x] Implementar revisión humana, corrección manual y auditoría de resultados de IA.
+- [x] Implementar People AI Assistant con consultas reales tenant-scoped sobre contrataciones, documentos, estados y pendientes.
+- [x] Implementar asistente contextual por contratación con respuestas transparentes y sin datos fuera del contexto autorizado.
+- [x] Implementar acciones sugeridas con confirmación explícita para cualquier mutación sensible.
+- [x] Implementar alertas AI Insights con estados de lectura, revisión y resolución sin spam.
+- [x] Implementar resumen inteligente de contratación y actualización cuando cambien los datos relevantes.
+- [x] Integrar las experiencias en HR y HiringDetailPage usando componentes existentes y diseño responsive.
+- [x] Mantener preparados los contratos para Knowledge Base, WhatsApp y Teams sin implementar esos canales.
+- [x] Añadir pruebas de IA documental, asistente DEMO, transparencia y no invención de datos.
+- [x] Ejecutar TypeScript, suite completa de tests y build; corregir regresiones sin avanzar a Fase 5.
+- [x] Documentar proveedor/modelo disponible, modo DEMO, datos procesados, privacidad, configuración externa y límites reales de Fase 4A.
+- [ ] Guardar checkpoint final de Fase 4A sin avanzar a WhatsApp, Teams ni otros módulos.
+
+## Correcciones de cobertura Fase 4A
+
+- [x] Añadir en HiringDetailPage un asistente contextual por proceso que llame a trpc.ai.ask con processId.
+- [x] Implementar en la UI de revisión un flujo de corrección manual real para editar requisito asociado y/o tipo detectado.
+- [x] Crear un diálogo de confirmación explícita para acciones sensibles sugeridas por la IA, con confirmar/cancelar y sin ejecución automática.
+- [x] Volver a validar HR + detalle de contratación y añadir pruebas de estas superficies.
+
+## Cobertura UI verificable Fase 4A
+
+- [x] Añadir pruebas de contrato para asistente contextual, corrección manual y diálogo de confirmación explícita.
+- [x] Reejecutar TypeScript, suite y build; actualizar el conteo real de pruebas.

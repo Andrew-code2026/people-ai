@@ -5,6 +5,39 @@ export type TenantContext = { companyId: number; userId: number; role: RoleKey }
 export type LlmMessage = { role: "system" | "user" | "assistant"; content: string };
 export type LlmAnswer = { content: string; model: string; usage?: { inputTokens?: number; outputTokens?: number } };
 
+export type AiDocumentFindingInput = {
+  documentId?: number;
+  requirementId?: number;
+  sourcePageStart?: number;
+  sourcePageEnd?: number;
+  detectedType: string;
+  suggestedName?: string;
+  confidence: number;
+  status: "identified" | "review_required" | "confirmed" | "corrected" | "rejected";
+  issueType?: string;
+  issueMessage?: string;
+  extractedData?: Record<string, unknown>;
+};
+
+export type AiDocumentAnalysisInput = {
+  candidateName: string;
+  positionName: string;
+  requirements: Array<{ id: number; title: string; required: boolean }>;
+  documents: Array<{ id: number; originalName: string; normalizedName: string; mimeType: string; url?: string }>;
+};
+
+export type AiDocumentAnalysisOutput = {
+  findings: AiDocumentFindingInput[];
+  summary: string;
+};
+
+export interface AIProvider {
+  readonly name: string;
+  readonly mode: "demo" | "real";
+  analyzeDocuments(input: { tenant: TenantContext; data: AiDocumentAnalysisInput }): Promise<AiDocumentAnalysisOutput>;
+  answerAssistant(input: { tenant: TenantContext; question: string; context: string }): Promise<{ content: string; model: string }>;
+}
+
 export interface LlmProvider {
   readonly name: string;
   generateAnswer(input: { messages: LlmMessage[]; tenant: TenantContext; temperature?: number }): Promise<LlmAnswer>;
