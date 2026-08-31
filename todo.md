@@ -66,3 +66,13 @@
 - [x] Separar funcionalidades implementables ahora de extensiones que requieren preparación o decisiones del usuario.
 - [x] Definir un plan técnico priorizado para implementar la Fase 2 sin romper la Fase 1.
 - [x] Entregar un documento de análisis de la Fase 2 con criterios de aceptación y próximos pasos.
+
+## Fase 3 — análisis del portal del candidato
+
+- [x] Analizar completamente pasted_content_4.txt como especificación de la Fase 3.
+- [x] Comparar el portal del candidato con la arquitectura y el MVP existentes.
+- [x] Evaluar seguridad de enlaces, identidad, expiración, archivos y aislamiento multi-tenant.
+- [x] Definir el modelo de datos y los contratos necesarios para documentos y expedientes.
+- [x] Separar implementación de esta fase frente a IA documental, WhatsApp, Teams y otras exclusiones.
+- [x] Preparar un plan técnico priorizado y criterios de aceptación ejecutables.
+- [x] Documentar y entregar el análisis de la Fase 3 sin implementarla todavía.
