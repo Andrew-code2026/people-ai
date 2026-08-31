@@ -56,4 +56,4 @@
 - [x] Separar Canales e integraciones en una vista específica de /hr/settings.
 - [x] Guardar un checkpoint nuevo posterior a la validación de esta reestructuración.
 
-- [ ] Guardar checkpoint final tras la reestructuración HR y la validación de TypeScript, Vitest y las vistas HR específicas.
+- [x] Guardar checkpoint final tras la reestructuración HR y la validación de TypeScript, Vitest y las vistas HR específicas.
