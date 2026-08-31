@@ -29,6 +29,20 @@
       "when": 1788138208510,
       "tag": "0003_rapid_jetstream",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1788140457784,
+      "tag": "0004_loud_ser_duncan",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1788140948425,
+      "tag": "0005_silly_dark_beast",
+      "breakpoints": true
     }
   ]
 }

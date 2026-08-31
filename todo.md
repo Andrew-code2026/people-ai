@@ -119,3 +119,51 @@
 
 - [x] Probar límites reales de acceso en contratación/documentos: rol insuficiente y aislamiento cross-tenant.
 - [x] Probar portal público con enlace expirado/revocado y envío incompleto con documentos faltantes.
+
+## Fase 3.1 — análisis e implementación
+
+- [x] Leer y analizar completamente pasted_content_6.txt.
+- [x] Comparar la Fase 3.1 con las funcionalidades existentes de Fases 1, 2 y 3.
+- [x] Definir migraciones, contratos y reglas de seguridad sin romper el aislamiento multi-tenant.
+- [x] Implementar backend y persistencia de los nuevos flujos de Fase 3.1.
+- [x] Implementar las vistas y acciones frontend requeridas por Fase 3.1.
+- [x] Reutilizar datos demo ficticios existentes y mantener los roles y permisos existentes; los eventos de Fase 3.1 se generan bajo demanda.
+- [x] Añadir pruebas de seguridad, flujo, errores y aislamiento mediante helpers y procedimientos tRPC sin sesión.
+- [x] Validar TypeScript, Vitest y build; responsive de rutas protegidas queda pendiente de sesión manual.
+- [x] Documentar la implementación, límites y pendientes reales de Fase 3.1.
+- [ ] Guardar checkpoint final de Fase 3.1.
+
+## Cierre y verificación solicitada de Fase 3.1
+
+- [x] Auditar cada requisito de enlaces, seguimiento, comunicaciones, recordatorios, alertas, ZIP, auditoría, RBAC, multi-tenancy y OTP.
+- [x] Completar o verificar apertura, revocación, regeneración y expiración del enlace con actividad y auditoría.
+- [x] Completar o verificar envío, recordatorio, cooldown, estado no configurado y plantillas de correo sin falsos éxitos.
+- [x] Implementar alertas visuales de enlaces próximos a expirar en dashboard y notificaciones internas para documentación enviada; la alerta específica de expiración permanece visual.
+- [x] Implementar descarga ZIP privada del expediente con auditoría.
+- [x] Completar preparación OTP con hash, expiración, intentos e invalidación sin fingir proveedor.
+- [x] Añadir pruebas para correo no configurado, cooldown, ZIP, auditoría y alertas.
+- [x] Ejecutar validación automatizada del flujo con contratos y datos demo; documentar qué requiere sesión, storage y configuración externa.
+- [ ] Guardar checkpoint final sin avanzar a Fase 4.
+
+## Validación sin sesión real
+
+- [x] Ejecutar pruebas automatizadas de OTP, correo no configurado/configurado mock, plantillas, ZIP, enlaces y estados.
+- [x] Ejecutar TypeScript y build sin enviar correos ni invocar proveedores externos reales.
+- [x] Documentar como pendiente manual la navegación autenticada y la descarga ZIP contra objetos reales de storage.
+
+## Pruebas faltantes detectadas por auditoría
+
+- [x] Añadir prueba Vitest para el cooldown de recordatorios.
+- [x] Añadir pruebas de contrato y helpers para confirmar acciones de correo, OTP y descarga ZIP; la persistencia se mantiene auditada en el dominio.
+- [x] Añadir prueba para los helpers de expiración y alertas de enlaces próximos a expirar.
+
+## Trazabilidad final de enlaces
+
+- [x] Registrar AuditLog explícito cuando el candidato abre un enlace válido y cuando se detecta expiración.
+- [x] Documentar formalmente que la alerta de expiración es visual; las notificaciones internas se generan para documentación enviada.
+
+## Brechas de evidencia antes del checkpoint
+
+- [x] Documentar formalmente que Fase 3.1 reutiliza procesos demo previos y genera comunicaciones/actividad/alertas/OTP bajo demanda, sin seed ficticio adicional.
+- [x] Añadir pruebas de procedimientos tRPC Fase 3.1 para guards de comunicación, alertas, ZIP y tokens inválidos; los flujos con DB/storage quedan cubiertos por helpers y pendientes manuales.
+- [x] Dejar marcada como pendiente manual la responsive de las rutas protegidas mientras el login del navegador siga bloqueado.

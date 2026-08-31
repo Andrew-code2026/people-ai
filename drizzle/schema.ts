@@ -181,5 +181,25 @@ export type HiringProcess = typeof hiringProcesses.$inferSelect;
 export type HiringRequirement = typeof hiringRequirements.$inferSelect;
 export type CandidateAccessLink = typeof candidateAccessLinks.$inferSelect;
 export type CandidateDocument = typeof candidateDocuments.$inferSelect;
+export const communicationLogs = mysqlTable("communication_logs", {
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), userId: int("userId"), type: varchar("type", { length: 40 }).notNull(), recipient: varchar("recipient", { length: 320 }).notNull(), subject: varchar("subject", { length: 240 }).notNull(), status: mysqlEnum("status", ["not_sent", "sent", "error", "delivered", "opened"]).default("not_sent").notNull(), errorMessage: text("errorMessage"), sentAt: timestamp("sentAt"), cooldownUntil: timestamp("cooldownUntil"), createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ companyIdx: index("communications_company_idx").on(table.companyId), processIdx: index("communications_process_idx").on(table.processId), recipientIdx: index("communications_recipient_idx").on(table.recipient) }));
+
+export const processActivities = mysqlTable("process_activities", {
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), actorType: mysqlEnum("actorType", ["analyst", "candidate", "system"]).notNull(), actorUserId: int("actorUserId"), type: varchar("type", { length: 80 }).notNull(), metadata: text("metadata"), createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ companyIdx: index("activities_company_idx").on(table.companyId), processIdx: index("activities_process_idx").on(table.processId) }));
+
+export const candidateOtpChallenges = mysqlTable("candidate_otp_challenges", {
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), codeHash: varchar("codeHash", { length: 128 }).notNull(), expiresAt: timestamp("expiresAt").notNull(), attempts: int("attempts").default(0).notNull(), maxAttempts: int("maxAttempts").default(5).notNull(), invalidatedAt: timestamp("invalidatedAt"), verifiedAt: timestamp("verifiedAt"), createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ companyIdx: index("otp_company_idx").on(table.companyId), processIdx: index("otp_process_idx").on(table.processId) }));
+
+export const companyCommunicationSettings = mysqlTable("company_communication_settings", {
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull().unique(), senderName: varchar("senderName", { length: 160 }).default("Equipo de Talento Humano").notNull(), senderEmail: varchar("senderEmail", { length: 320 }), logoUrl: varchar("logoUrl", { length: 500 }), signature: text("signature"), subjectTemplate: varchar("subjectTemplate", { length: 240 }), bodyTemplate: text("bodyTemplate"), reminderTemplate: text("reminderTemplate"), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CandidateOtpChallenge = typeof candidateOtpChallenges.$inferSelect;
+export type CommunicationLog = typeof communicationLogs.$inferSelect;
+export type ProcessActivity = typeof processActivities.$inferSelect;
+export type CompanyCommunicationSettings = typeof companyCommunicationSettings.$inferSelect;
 export type InternalNotification = typeof internalNotifications.$inferSelect;
 export type RoleKey = "SUPER_ADMIN" | "COMPANY_ADMIN" | "HR" | "FINANCE" | "MANAGER" | "EMPLOYEE";
