@@ -131,7 +131,7 @@
 - [x] Añadir pruebas de seguridad, flujo, errores y aislamiento mediante helpers y procedimientos tRPC sin sesión.
 - [x] Validar TypeScript, Vitest y build; responsive de rutas protegidas queda pendiente de sesión manual.
 - [x] Documentar la implementación, límites y pendientes reales de Fase 3.1.
-- [ ] Guardar checkpoint final de Fase 3.1.
+- [x] Guardar checkpoint final de Fase 3.1.
 
 ## Cierre y verificación solicitada de Fase 3.1
 
@@ -143,7 +143,7 @@
 - [x] Completar preparación OTP con hash, expiración, intentos e invalidación sin fingir proveedor.
 - [x] Añadir pruebas para correo no configurado, cooldown, ZIP, auditoría y alertas.
 - [x] Ejecutar validación automatizada del flujo con contratos y datos demo; documentar qué requiere sesión, storage y configuración externa.
-- [ ] Guardar checkpoint final sin avanzar a Fase 4.
+- [x] Guardar checkpoint final sin avanzar a Fase 4.
 
 ## Validación sin sesión real
 
