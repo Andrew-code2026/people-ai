@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Building2, FileText, LayoutDashboard, LogOut, PanelLeft, Users, WalletCards } from "lucide-react";
+import { Bell, Bot, Building2, FileText, LayoutDashboard, LogOut, PanelLeft, Settings2, UserPlus, Users, WalletCards } from "lucide-react";
 import type { RoleKey } from "../../../drizzle/schema";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -31,7 +31,7 @@ import { Button } from "./ui/button";
 const menuItemsByRole: Record<RoleKey, Array<{ icon: typeof LayoutDashboard; label: string; path: string }>> = {
   SUPER_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/platform" }, { icon: Building2, label: "Empresas", path: "/platform" }, { icon: Users, label: "Usuarios", path: "/platform" }],
   COMPANY_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/company" }, { icon: Building2, label: "Empresa", path: "/company" }, { icon: Users, label: "Usuarios", path: "/company" }],
-  HR: [{ icon: LayoutDashboard, label: "Dashboard", path: "/hr" }, { icon: Users, label: "Empleados", path: "/hr" }, { icon: FileText, label: "Documentos", path: "/hr" }],
+  HR: [{ icon: LayoutDashboard, label: "Inicio", path: "/hr" }, { icon: UserPlus, label: "Contratación", path: "/hr/contratacion" }, { icon: Bot, label: "HR Assistant", path: "/hr/assistant" }, { icon: FileText, label: "Base de conocimiento", path: "/hr/knowledge" }, { icon: Bell, label: "Notificaciones", path: "/hr/notifications" }, { icon: Settings2, label: "Configuración", path: "/hr/settings" }],
   FINANCE: [{ icon: LayoutDashboard, label: "Dashboard", path: "/finance" }, { icon: WalletCards, label: "Costos", path: "/finance" }, { icon: FileText, label: "Reportes", path: "/finance" }],
   MANAGER: [{ icon: LayoutDashboard, label: "Dashboard", path: "/manager" }, { icon: Users, label: "Mi equipo", path: "/manager" }, { icon: FileText, label: "Solicitudes", path: "/manager" }],
   EMPLOYEE: [{ icon: LayoutDashboard, label: "Inicio", path: "/employee" }, { icon: Users, label: "Mi perfil", path: "/employee" }, { icon: FileText, label: "Mis solicitudes", path: "/employee" }],
@@ -44,8 +44,10 @@ const MAX_WIDTH = 480;
 
 export default function DashboardLayout({
   children,
+  roleOverride,
 }: {
   children: React.ReactNode;
+  roleOverride?: RoleKey;
 }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
@@ -93,7 +95,7 @@ export default function DashboardLayout({
         } as CSSProperties
       }
     >
-      <DashboardLayoutContent setSidebarWidth={setSidebarWidth}>
+      <DashboardLayoutContent setSidebarWidth={setSidebarWidth} roleOverride={roleOverride}>
         {children}
       </DashboardLayoutContent>
     </SidebarProvider>
@@ -103,15 +105,17 @@ export default function DashboardLayout({
 type DashboardLayoutContentProps = {
   children: React.ReactNode;
   setSidebarWidth: (width: number) => void;
+  roleOverride?: RoleKey;
 };
 
 function DashboardLayoutContent({
   children,
   setSidebarWidth,
+  roleOverride,
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const role = (user?.role === "admin" ? "SUPER_ADMIN" : "COMPANY_ADMIN") as RoleKey;
+  const role = roleOverride ?? ((user?.role === "admin" ? "SUPER_ADMIN" : "COMPANY_ADMIN") as RoleKey);
   const menuItems = menuItemsByRole[role];
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";

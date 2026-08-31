@@ -2,8 +2,9 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDashboardForRole, assertCompanyScope, assertRole } from "./authorization";
-import { getAppProfile, listCompanies, listDepartmentsByCompany, listEmployeesByCompany } from "./db";
+import { getAppProfile, listCompanies, listDepartmentsByCompany, listEmployeesByCompany, listKnowledgeByCompany, listRecruitmentByCompany } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { demoHRAssistant } from "./aiDemo";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -37,6 +38,26 @@ export const appRouter = router({
       const access = await resolveAccess(ctx.user);
       assertRole(access, ["SUPER_ADMIN"]);
       return listCompanies();
+    }),
+  }),
+  hr: router({
+    recruitment: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const access = await resolveAccess(ctx.user);
+      assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
+      assertCompanyScope(access, input.companyId);
+      return listRecruitmentByCompany(input.companyId);
+    }),
+    assistantPreview: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const access = await resolveAccess(ctx.user);
+      assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
+      assertCompanyScope(access, input.companyId);
+      return demoHRAssistant.generateAnswer({ tenant: { companyId: input.companyId, userId: ctx.user.id, role: access.role }, messages: [{ role: "user", content: "¿Cómo solicito un certificado laboral?" }] });
+    }),
+    knowledge: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const access = await resolveAccess(ctx.user);
+      assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
+      assertCompanyScope(access, input.companyId);
+      return listKnowledgeByCompany(input.companyId);
     }),
   }),
   company: router({

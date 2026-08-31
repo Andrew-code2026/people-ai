@@ -59,3 +59,11 @@ Para documentos, utilizar `storagePut`/`storageGet` y persistir en la base de da
 ## Validación y continuidad
 
 Ejecutar `pnpm check` y `pnpm test` antes de cada checkpoint. Las pruebas esenciales cubren logout, RBAC y aislamiento. La Fase 2 puede incorporar rutas autenticadas por rol, gestión CRUD de empresas y empleados, auditoría efectiva, permisos personalizados y el almacenamiento documental.
+
+## Reestructuración de demo HR
+
+La experiencia principal ahora está enfocada en una analista de Talento Humano llamada Alexa Torres y en el tenant ficticio `Empresa Demo — Talento Humano` (`companyId = 4`). La ruta `/` y `/hr` muestran el dashboard especializado; las rutas `/platform`, `/company`, `/finance`, `/manager` y `/employee` conservan los contextos internos de la arquitectura aprobada.
+
+El sidebar HR presenta únicamente Inicio, Contratación, HR Assistant, Base de conocimiento, Notificaciones y Configuración. Las acciones todavía no implementadas producen feedback explícito de próxima fase. Contratación y Base de conocimiento ya tienen tablas y consultas tRPC aisladas por empresa, pero no implementan carga documental, enlaces de candidatos, OCR ni IA real.
+
+El asistente se modela como una lógica central independiente del canal. Web está disponible como experiencia de demo; WhatsApp y Microsoft Teams aparecen como canales futuros no conectados. `shared/extensions.ts` contiene los puertos `LlmProvider`, `KnowledgeBasePort`, `IntegrationAdapter` y `DocumentStoragePort` para que las siguientes fases agreguen proveedores sin acoplar el dashboard a un SDK específico.

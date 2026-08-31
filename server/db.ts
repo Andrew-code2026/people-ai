@@ -1,6 +1,6 @@
 import { and, asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { appProfiles, companies, departments, employees, type InsertUser, users } from "../drizzle/schema";
+import { appProfiles, companies, departments, employees, knowledgeBaseDocuments, recruitmentCandidates, type InsertUser, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -68,6 +68,18 @@ export async function listDepartmentsByCompany(companyId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(departments).where(eq(departments.companyId, companyId)).orderBy(asc(departments.name));
+}
+
+export async function listRecruitmentByCompany(companyId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(recruitmentCandidates).where(eq(recruitmentCandidates.companyId, companyId)).orderBy(asc(recruitmentCandidates.updatedAt));
+}
+
+export async function listKnowledgeByCompany(companyId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(knowledgeBaseDocuments).where(eq(knowledgeBaseDocuments.companyId, companyId)).orderBy(asc(knowledgeBaseDocuments.title));
 }
 
 export async function listEmployeesByCompany(companyId: number) {

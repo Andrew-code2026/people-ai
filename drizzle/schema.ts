@@ -113,4 +113,28 @@ export type Company = typeof companies.$inferSelect;
 export type AppProfile = typeof appProfiles.$inferSelect;
 export type Employee = typeof employees.$inferSelect;
 export type Department = typeof departments.$inferSelect;
+export const recruitmentCandidates = mysqlTable("recruitment_candidates", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  candidateName: varchar("candidateName", { length: 160 }).notNull(),
+  position: varchar("position", { length: 140 }).notNull(),
+  documentsReceived: int("documentsReceived").default(0).notNull(),
+  documentsRequired: int("documentsRequired").default(9).notNull(),
+  status: mysqlEnum("status", ["pending", "complete", "review"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ companyIdx: index("recruitment_company_idx").on(table.companyId) }));
+
+export const knowledgeBaseDocuments = mysqlTable("knowledge_base_documents", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  title: varchar("title", { length: 180 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
+  status: mysqlEnum("status", ["demo", "draft", "published"]).default("demo").notNull(),
+  sourceRef: varchar("sourceRef", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({ companyIdx: index("knowledge_company_idx").on(table.companyId) }));
+
+export type RecruitmentCandidate = typeof recruitmentCandidates.$inferSelect;
+export type KnowledgeBaseDocument = typeof knowledgeBaseDocuments.$inferSelect;
 export type RoleKey = "SUPER_ADMIN" | "COMPANY_ADMIN" | "HR" | "FINANCE" | "MANAGER" | "EMPLOYEE";
