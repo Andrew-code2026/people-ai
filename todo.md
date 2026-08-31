@@ -217,7 +217,7 @@
 - [x] Añadir pruebas de IA documental, asistente DEMO, transparencia y no invención de datos.
 - [x] Ejecutar TypeScript, suite completa de tests y build; corregir regresiones sin avanzar a Fase 5.
 - [x] Documentar proveedor/modelo disponible, modo DEMO, datos procesados, privacidad, configuración externa y límites reales de Fase 4A.
-- [ ] Guardar checkpoint final de Fase 4A sin avanzar a WhatsApp, Teams ni otros módulos.
+- [x] Guardar checkpoint final de Fase 4A sin avanzar a WhatsApp, Teams ni otros módulos.
 
 ## Correcciones de cobertura Fase 4A
 
