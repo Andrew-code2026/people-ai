@@ -28,6 +28,8 @@ import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const menuItemsByRole: Record<RoleKey, Array<{ icon: typeof LayoutDashboard; label: string; path: string }>> = {
   SUPER_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/platform" }, { icon: Building2, label: "Empresas", path: "/platform" }, { icon: Users, label: "Usuarios", path: "/platform" }],
@@ -188,17 +190,24 @@ function DashboardLayoutContent({
           className="border-r-0"
           disableTransition={isResizing}
         >
-          <SidebarHeader className="h-16 justify-center">
-            <div className="flex items-center gap-3 px-2 transition-all w-full">
-              <button
-                onClick={toggleSidebar}
-                className="h-8 w-8 flex items-center justify-center hover:bg-accent rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
-                aria-label="Toggle navigation"
-              >
-                <PanelLeft className="h-4 w-4 text-muted-foreground" />
-              </button>
+          <SidebarHeader className="h-16 justify-center p-2 group-data-[collapsible=icon]:p-2">
+            <div className="flex items-center gap-3 w-full group-data-[collapsible=icon]:justify-center">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={toggleSidebar}
+                    className="h-8 w-8 flex items-center justify-center hover:bg-sidebar-accent hover:text-sidebar-accent-foreground rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0 cursor-pointer text-muted-foreground group-data-[collapsible=icon]:mx-auto"
+                    aria-label={isCollapsed ? "Expandir barra lateral" : "Ocultar barra lateral"}
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right" align="center" hidden={!isCollapsed}>
+                  Expandir barra lateral
+                </TooltipContent>
+              </Tooltip>
               {!isCollapsed ? (
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
                   <span className="font-semibold tracking-tight truncate">
                     PEOPLE AI
                   </span>
@@ -217,12 +226,24 @@ function DashboardLayoutContent({
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}
                       tooltip={item.label}
-                      className={`h-10 transition-all font-normal`}
+                      className={cn(
+                        "h-10 transition-colors duration-150 font-normal cursor-pointer rounded-lg",
+                        "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                        "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-0! group-data-[collapsible=icon]:justify-center",
+                        isActive
+                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                          : "text-muted-foreground hover:text-sidebar-accent-foreground"
+                      )}
                     >
                       <item.icon
-                        className={`h-4 w-4 ${isActive ? "text-primary" : ""}`}
+                        className={cn(
+                          "h-4 w-4 shrink-0 transition-colors",
+                          isActive
+                            ? "text-primary"
+                            : "text-muted-foreground group-hover/menu-item:text-sidebar-accent-foreground"
+                        )}
                       />
-                      <span>{item.label}</span>
+                      <span className="truncate group-data-[collapsible=icon]:hidden">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -230,17 +251,20 @@ function DashboardLayoutContent({
             </SidebarMenu>
           </SidebarContent>
 
-          <SidebarFooter className="p-3">
+          <SidebarFooter className="p-2 group-data-[collapsible=icon]:p-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
+                <button
+                  className="flex items-center gap-3 rounded-lg p-2 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors w-full text-left group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-0 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:mx-auto focus:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+                  aria-label="Perfil de usuario"
+                >
+                  <Avatar className="h-8 w-8 border shrink-0">
+                    <AvatarFallback className="text-xs font-medium bg-muted text-foreground">
                       {user?.name?.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
-                    <p className="text-sm font-medium truncate leading-none">
+                    <p className="text-sm font-medium truncate leading-none text-foreground">
                       {user?.name || "-"}
                     </p>
                     <p className="text-xs text-muted-foreground truncate mt-1.5">
