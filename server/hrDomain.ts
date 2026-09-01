@@ -26,12 +26,164 @@ const escapeHtml = (value: string) => value.replace(/[&<>\"']/g, char => ({ "&":
 const emailSubject = "Documentación requerida para tu proceso de contratación";
 export const buildCandidateEmail = (detail: NonNullable<Awaited<ReturnType<typeof getHiringDetail>>>, portalUrl: string, reminder = false) => { const candidate = escapeHtml(detail.candidate?.fullName || "candidato"); const position = escapeHtml(detail.position?.name || "tu cargo"); const company = escapeHtml(detail.company?.name || "la empresa"); const intro = reminder ? "Te recordamos que todavía tienes documentos pendientes de cargar para completar tu proceso de contratación." : `Nos encontramos adelantando tu proceso de contratación para el cargo de ${position}.`; const text = `Hola ${candidate},\\n\\n${intro}\\n\\nCompleta tu documentación aquí: ${portalUrl}\\n\\nGracias,\\nEquipo de Talento Humano.`; return { subject: reminder ? "Recordatorio: documentación pendiente" : emailSubject, text, html: `<p>Hola ${candidate},</p><p>${intro}</p><p>Empresa: ${company}</p><p><a href=\"${escapeHtml(portalUrl)}\">Completar documentación</a></p><p>Gracias,<br>Equipo de Talento Humano.</p>` }; };
 
+export const DEFAULT_TEMPLATE_NAME = "Expediente de Ingreso Estándar";
+
+export const DEFAULT_STANDARD_DOCUMENTS = [
+  { title: "Cédula de Ciudadanía (150%)", description: "Copia legible por ambas caras en PDF", required: true, sortOrder: 1 },
+  { title: "Hoja de Vida Actualizada", description: "Formato PDF con datos de contacto", required: true, sortOrder: 2 },
+  { title: "Certificado de Afiliación EPS", description: "No mayor a 30 días de expedición", required: true, sortOrder: 3 },
+  { title: "Certificado de Fondo de Pensiones", description: "No mayor a 30 días de expedición", required: true, sortOrder: 4 },
+  { title: "Certificaciones Académicas", description: "Títulos profesionales, actas de grado y certificaciones", required: false, sortOrder: 5 },
+  { title: "Examen Médico de Ingreso", description: "Concepto de aptitud laboral emitido por IPS autorizada", required: true, sortOrder: 6 },
+];
+
 export async function listPositions(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(jobPositions).where(eq(jobPositions.companyId, companyId)).orderBy(asc(jobPositions.name)); }
 export async function createPosition(companyId: number, name: string, description?: string, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(jobPositions).values({ companyId, name, description: description || null }); const id = Number(result[0].insertId); await audit(companyId, "job_position_created", { id, name }, userId); return id; }
 export async function listTemplates(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active"))).orderBy(desc(documentTemplates.updatedAt)); }
 export async function getTemplate(companyId: number, templateId: number) { const db = await getDb(); if (!db) return null; const template = (await db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId))).limit(1))[0]; if (!template) return null; const items = await db.select().from(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))).orderBy(asc(documentTemplateItems.sortOrder)); return { ...template, items }; }
 export async function createTemplate(companyId: number, positionId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0]; if (!position) throw new Error("Position not found"); const result = await db.insert(documentTemplates).values({ companyId, positionId, name }); const templateId = Number(result[0].insertId); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_created", { templateId, positionId }, userId); return getTemplate(companyId, templateId); }
 export async function updateTemplate(companyId: number, templateId: number, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const template = await getTemplate(companyId, templateId); if (!template) throw new Error("Template not found"); await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_updated", { templateId }, userId); return getTemplate(companyId, templateId); }
+export async function getMasterStandardTemplate(companyId: number) {
+  const db = await getDb();
+  if (!db) return { items: DEFAULT_STANDARD_DOCUMENTS };
+  
+  const standardTemplate = (await db.select().from(documentTemplates).where(and(
+    eq(documentTemplates.companyId, companyId),
+    eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
+    eq(documentTemplates.status, "active")
+  )).orderBy(desc(documentTemplates.updatedAt)).limit(1))[0];
+
+  if (!standardTemplate) {
+    return { items: DEFAULT_STANDARD_DOCUMENTS };
+  }
+
+  const items = await db.select().from(documentTemplateItems).where(and(
+    eq(documentTemplateItems.companyId, companyId),
+    eq(documentTemplateItems.templateId, standardTemplate.id)
+  )).orderBy(asc(documentTemplateItems.sortOrder));
+
+  return {
+    items: items.length > 0 ? items.map((i) => ({
+      title: i.title,
+      description: i.description || undefined,
+      required: i.required,
+      sortOrder: i.sortOrder,
+    })) : DEFAULT_STANDARD_DOCUMENTS
+  };
+}
+
+export async function updateMasterStandardTemplate(
+  companyId: number,
+  items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>,
+  applyToAllPositions = true,
+  userId?: number
+) {
+  const db = await getDb();
+  if (!db) {
+    return {
+      items: items.map((item, idx) => ({
+        ...item,
+        sortOrder: idx + 1,
+      })),
+    };
+  }
+
+  const standardTemplates = await db.select().from(documentTemplates).where(and(
+    eq(documentTemplates.companyId, companyId),
+    eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
+    eq(documentTemplates.status, "active")
+  ));
+
+  if (standardTemplates.length > 0) {
+    const targetTemplates = applyToAllPositions ? standardTemplates : [standardTemplates[0]];
+    for (const t of targetTemplates) {
+      await db.delete(documentTemplateItems).where(and(
+        eq(documentTemplateItems.companyId, companyId),
+        eq(documentTemplateItems.templateId, t.id)
+      ));
+      if (items.length) {
+        await db.insert(documentTemplateItems).values(
+          items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: t.id }))
+        );
+      }
+      await db.update(documentTemplates).set({ updatedAt: new Date() }).where(eq(documentTemplates.id, t.id));
+    }
+  } else {
+    const positions = await db.select().from(jobPositions).where(eq(jobPositions.companyId, companyId)).limit(1);
+    if (positions.length > 0) {
+      const res = await db.insert(documentTemplates).values({
+        companyId,
+        positionId: positions[0].id,
+        name: DEFAULT_TEMPLATE_NAME,
+        status: "active"
+      });
+      const tId = Number(res[0].insertId);
+      if (items.length) {
+        await db.insert(documentTemplateItems).values(
+          items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: tId }))
+        );
+      }
+    }
+  }
+
+  await audit(companyId, "master_standard_template_updated", { count: items.length, applyToAllPositions }, userId);
+  return getMasterStandardTemplate(companyId);
+}
+
+export async function assignDefaultTemplate(companyId: number, positionId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
+  if (!position) throw new Error("Position not found");
+
+  const master = await getMasterStandardTemplate(companyId);
+  const itemsToAssign = master.items.length > 0 ? master.items : DEFAULT_STANDARD_DOCUMENTS;
+
+  let template = (await db.select().from(documentTemplates).where(and(
+    eq(documentTemplates.companyId, companyId),
+    eq(documentTemplates.positionId, positionId),
+    eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
+    eq(documentTemplates.status, "active")
+  )).limit(1))[0];
+
+  if (!template) {
+    const result = await db.insert(documentTemplates).values({
+      companyId,
+      positionId,
+      name: DEFAULT_TEMPLATE_NAME,
+      status: "active"
+    });
+    const templateId = Number(result[0].insertId);
+    await db.insert(documentTemplateItems).values(
+      itemsToAssign.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId }))
+    );
+    await audit(companyId, "document_template_default_assigned", { templateId, positionId }, userId);
+    return getTemplate(companyId, templateId);
+  } else {
+    await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, template.id)));
+    await db.insert(documentTemplateItems).values(
+      itemsToAssign.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: template.id }))
+    );
+    await audit(companyId, "document_template_default_reassigned", { templateId: template.id, positionId }, userId);
+    return getTemplate(companyId, template.id);
+  }
+}
+export async function updateTemplateName(companyId: number, templateId: number, name: string, userId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(documentTemplates).set({ name, updatedAt: new Date() }).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId)));
+  await audit(companyId, "document_template_name_updated", { templateId, name }, userId);
+  return getTemplate(companyId, templateId);
+}
+export async function deleteTemplate(companyId: number, templateId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const template = await getTemplate(companyId, templateId);
+  if (!template) throw new Error("Template not found");
+  await db.update(documentTemplates).set({ status: "archived", updatedAt: new Date() }).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId)));
+  await audit(companyId, "document_template_deleted", { templateId, name: template.name }, userId);
+  return { success: true, id: templateId };
+}
 export async function listHiring(companyId: number) { const db = await getDb(); if (!db) return []; const processes = await db.select().from(hiringProcesses).where(eq(hiringProcesses.companyId, companyId)).orderBy(desc(hiringProcesses.createdAt)); return Promise.all(processes.map(async process => { const detail = await getHiringDetail(companyId, process.id); return { ...process, candidateName: detail?.candidate?.fullName || "Candidato", positionName: detail?.position?.name || "Cargo", requiredCount: detail?.requirements.filter(r => r.required).length || 0, receivedCount: detail?.requirements.filter(r => ["uploaded", "replaced", "verified"].includes(r.status)).length || 0 }; })); }
 export async function createHiring(companyId: number, userId: number, input: { fullName: string; identificationNumber: string; email: string; positionId: number; templateId: number }) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const template = await getTemplate(companyId, input.templateId); if (!template || template.positionId !== input.positionId) throw new Error("Template not found"); const candidateResult = await db.insert(candidateProfiles).values({ companyId, fullName: input.fullName, identificationNumber: input.identificationNumber, email: input.email }); const candidateId = Number(candidateResult[0].insertId); const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending" }); const processId = Number(processResult[0].insertId); await db.insert(hiringRequirements).values(template.items.map(item => ({ companyId, processId, sourceTemplateItemId: item.id, title: item.title, description: item.description, required: item.required, sortOrder: item.sortOrder }))); await audit(companyId, "hiring_process_created", { processId, candidateId }, userId); return getHiringDetail(companyId, processId); }
 export async function getHiringDetail(companyId: number, processId: number) { const db = await getDb(); if (!db) return null; const process = (await db.select().from(hiringProcesses).where(and(eq(hiringProcesses.companyId, companyId), eq(hiringProcesses.id, processId))).limit(1))[0]; if (!process) return null; const candidate = (await db.select().from(candidateProfiles).where(and(eq(candidateProfiles.companyId, companyId), eq(candidateProfiles.id, process.candidateId))).limit(1))[0]; const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, process.positionId))).limit(1))[0]; const company = (await db.select().from(companies).where(eq(companies.id, companyId)).limit(1))[0]; const requirements = await db.select().from(hiringRequirements).where(and(eq(hiringRequirements.companyId, companyId), eq(hiringRequirements.processId, processId))).orderBy(asc(hiringRequirements.sortOrder)); const documents = await db.select().from(candidateDocuments).where(and(eq(candidateDocuments.companyId, companyId), eq(candidateDocuments.processId, processId), eq(candidateDocuments.status, "active"))); return { process, candidate, position, company, requirements, documents }; }
