@@ -230,3 +230,13 @@
 
 - [x] Añadir pruebas de contrato para asistente contextual, corrección manual y diálogo de confirmación explícita.
 - [x] Reejecutar TypeScript, suite y build; actualizar el conteo real de pruebas.
+
+## Exportación GitHub — PEOPLE AI Fase 4A
+
+- [x] Revisar código, historial y archivos generados para detectar secretos, tokens, credenciales y documentos privados.
+- [x] Verificar exclusión de .env; no existe .env local ni fue necesario un .env.example.
+- [x] Verificar que no existan PDFs ni documentos reales de candidatos dentro del repositorio.
+- [x] Ejecutar TypeScript, tests y build sin modificar funcionalidades de Fase 4A.
+- [x] Revisar el diff final y conservar exactamente el estado actual.
+- [ ] Crear repositorio privado people-ai y exportar el commit inicial solicitado.
+- [ ] Confirmar la exportación y no avanzar a ninguna fase nueva.
