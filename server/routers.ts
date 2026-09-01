@@ -10,6 +10,10 @@ import { createHiring, createPosition, createTemplate, generateLink, getDocument
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
+import { seedDemoData } from "./seed";
+import { sdk } from "./_core/sdk";
+import { ONE_YEAR_MS } from "@shared/const";
+
 const roleSchema = z.enum(["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"]);
 
 async function resolveAccess(user: { id: number; role: string }) {
@@ -27,6 +31,17 @@ export const appRouter = router({
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
+    }),
+    devLogin: publicProcedure.mutation(async ({ ctx }) => {
+      const user = await seedDemoData();
+      if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error inicializando datos demo" });
+      const sessionToken = await sdk.createSessionToken(user.openId, {
+        name: user.name || "Alexa Torres",
+        expiresInMs: ONE_YEAR_MS,
+      });
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      return { success: true, user } as const;
     }),
   }),
   access: router({
