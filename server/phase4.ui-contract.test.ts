@@ -26,4 +26,17 @@ describe("Fase 4A UI contracts", () => {
     expect(source).toContain("Cancelar");
     expect(source).toContain("no ejecutará cambios automáticamente");
   });
+
+  it("garantiza que HRDashboard usa datos y rutas reales de backend sin datos demo hardcodeados", () => {
+    const source = readClient("HRDashboard.tsx");
+    expect(source).toContain("trpc.hiring.list.useQuery");
+    expect(source).toContain("trpc.hr.stats.useQuery");
+    expect(source).toContain("/hr/contrataciones");
+    expect(source).toContain("/hr/contrataciones/${candidate.id}");
+    expect(source).not.toContain('"08"');
+    expect(source).not.toContain('"14"');
+    expect(source).not.toContain('"05"');
+    expect(source).not.toContain('"142"');
+    expect(source).not.toContain("Consultas atendidas · demo");
+  });
 });

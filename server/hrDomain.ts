@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { createHash, randomBytes } from "node:crypto";
-import { auditLogs, candidateAccessLinks, candidateDocuments, candidateProfiles, candidateOtpChallenges, companies, communicationLogs, companyCommunicationSettings, documentTemplateItems, documentTemplates, hiringProcesses, hiringRequirements, internalNotifications, jobPositions, processActivities } from "../drizzle/schema";
+import { aiConversationMessages, auditLogs, candidateAccessLinks, candidateDocuments, candidateProfiles, candidateOtpChallenges, companies, communicationLogs, companyCommunicationSettings, documentTemplateItems, documentTemplates, hiringProcesses, hiringRequirements, internalNotifications, jobPositions, processActivities } from "../drizzle/schema";
 import { getDb } from "./db";
 import { storageGetSignedUrl, storagePut } from "./storage";
 import { prepareMailtoEmail } from "./emailService";
@@ -62,3 +62,27 @@ export const prepareCandidateReminder = (companyId: number, processId: number, u
 
 export async function createZipArchive(files: Array<{ name: string; bytes: Uint8Array }>) { const zip = new JSZip(); for (const file of files) zip.file(file.name, file.bytes); return zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }); }
 export async function downloadHiringZip(companyId: number, processId: number, userId: number) { const detail = await getHiringDetail(companyId, processId); if (!detail) throw new Error("Hiring process not found"); const files: Array<{ name: string; bytes: Uint8Array }> = []; for (const document of detail.documents) { const signedUrl = await storageGetSignedUrl(document.fileKey); const response = await fetch(signedUrl); if (!response.ok) throw new Error(`No se pudo descargar ${document.normalizedName}`); files.push({ name: document.normalizedName, bytes: new Uint8Array(await response.arrayBuffer()) }); } const archive = await createZipArchive(files); await audit(companyId, "hiring_archive_downloaded", { processId, documentCount: detail.documents.length }, userId); await activity(companyId, processId, "archive_downloaded", "analyst", userId, { documentCount: detail.documents.length }); return { filename: `${(detail.candidate?.fullName || "candidato").replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ_-]/g, "_")}_expediente.zip`, base64: archive.toString("base64"), documentCount: detail.documents.length }; }
+
+export async function getDashboardStats(companyId: number) {
+  const db = await getDb();
+  if (!db) return { totalProcesses: 0, pendingDocuments: 0, completeProcesses: 0, assistantQueries: 0 };
+  const processes = await listHiring(companyId);
+  const totalProcesses = processes.length;
+  const pendingDocuments = processes.reduce((sum, p) => sum + Math.max(0, p.requiredCount - p.receivedCount), 0);
+  const completeProcesses = processes.filter(p => p.status === "complete" || (p.requiredCount > 0 && p.receivedCount >= p.requiredCount)).length;
+
+  let assistantQueries = 0;
+  try {
+    const messages = await db.select().from(aiConversationMessages).where(and(eq(aiConversationMessages.companyId, companyId), eq(aiConversationMessages.role, "user")));
+    assistantQueries = messages.length;
+  } catch {
+    assistantQueries = 0;
+  }
+
+  return {
+    totalProcesses,
+    pendingDocuments,
+    completeProcesses,
+    assistantQueries,
+  };
+}

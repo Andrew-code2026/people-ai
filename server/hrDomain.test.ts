@@ -32,4 +32,18 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
     expect(() => assertRole({ role: "EMPLOYEE", companyId: 4 }, ["HR"])).toThrow();
     expect(() => assertRole({ role: "HR", companyId: 4 }, ["HR"])).not.toThrow();
   });
+
+  it("calcula estructura de estadísticas del dashboard", async () => {
+    const { getDashboardStats } = await import("./hrDomain");
+    const stats = await getDashboardStats(4);
+    expect(stats).toHaveProperty("totalProcesses");
+    expect(stats).toHaveProperty("pendingDocuments");
+    expect(stats).toHaveProperty("completeProcesses");
+    expect(stats).toHaveProperty("assistantQueries");
+    expect(typeof stats.totalProcesses).toBe("number");
+    expect(typeof stats.pendingDocuments).toBe("number");
+    expect(typeof stats.completeProcesses).toBe("number");
+    expect(typeof stats.assistantQueries).toBe("number");
+  });
 });
+

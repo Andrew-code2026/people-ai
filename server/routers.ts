@@ -6,7 +6,7 @@ import { getAppProfile, listCompanies, listDepartmentsByCompany, listEmployeesBy
 import { getSessionCookieOptions } from "./_core/cookies";
 import { demoHRAssistant } from "./aiDemo";
 import { analyzeHiringDocuments, askPeopleAi, availableAiModels, getHiringAiSummary, listAiConversations, listAiFindings, listAiInsights, listAiRuns, reviewAiFinding, updateAiInsight } from "./aiDomain";
-import { createHiring, createPosition, createTemplate, generateLink, getDocumentUrl, getHiringDetail, getLinkState, getPortal, listActivities, listCommunications, listHiring, listPositions, listTemplates, listNotifications, removePortalDocument, revokeLink, prepareCandidateEmail, prepareCandidateReminder, markCommunicationSent, downloadHiringZip, listExpiringLinks, requestCandidateOtp, submitPortal, verifyCandidateOtp, updateRequirement, updateTemplate, uploadPortalDocument } from "./hrDomain";
+import { createHiring, createPosition, createTemplate, generateLink, getDashboardStats, getDocumentUrl, getHiringDetail, getLinkState, getPortal, listActivities, listCommunications, listHiring, listPositions, listTemplates, listNotifications, removePortalDocument, revokeLink, prepareCandidateEmail, prepareCandidateReminder, markCommunicationSent, downloadHiringZip, listExpiringLinks, requestCandidateOtp, submitPortal, verifyCandidateOtp, updateRequirement, updateTemplate, uploadPortalDocument } from "./hrDomain";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -58,6 +58,12 @@ export const appRouter = router({
     }),
   }),
   hr: router({
+    stats: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const access = await resolveAccess(ctx.user);
+      assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
+      assertCompanyScope(access, input.companyId);
+      return getDashboardStats(input.companyId);
+    }),
     recruitment: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const access = await resolveAccess(ctx.user);
       assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
@@ -68,7 +74,10 @@ export const appRouter = router({
       const access = await resolveAccess(ctx.user);
       assertRole(access, ["SUPER_ADMIN", "HR", "COMPANY_ADMIN"]);
       assertCompanyScope(access, input.companyId);
-      return demoHRAssistant.generateAnswer({ tenant: { companyId: input.companyId, userId: ctx.user.id, role: access.role }, messages: [{ role: "user", content: "¿Cómo solicito un certificado laboral?" }] });
+      return {
+        model: "PEOPLE AI Assistant",
+        content: "Puedes solicitar certificados laborales directamente desde el módulo de Talento Humano o verificar el estado de tus radicados oficiales en la plataforma.",
+      };
     }),
     knowledge: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).query(async ({ ctx, input }) => {
       const access = await resolveAccess(ctx.user);
