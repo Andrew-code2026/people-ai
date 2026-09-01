@@ -8,30 +8,356 @@ import { trpc } from "@/lib/trpc";
 import { BookOpen, Bot, FileText, Plus, UserPlus, Users, Settings2, MessageCircle, ArrowUpRight, AlertTriangle } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
+import { cn } from "@/lib/utils";
 
 export default function HRDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const access = trpc.access.me.useQuery(undefined, { retry: false });
   const companyId = access.data?.companyId ?? 4;
-  const recruitment = trpc.hr.recruitment.useQuery({ companyId }, { enabled: Boolean(companyId) });
+  const hiring = trpc.hiring.list.useQuery({ companyId }, { enabled: Boolean(companyId) });
+  const stats = trpc.hr.stats.useQuery({ companyId }, { enabled: Boolean(companyId) });
   const knowledge = trpc.hr.knowledge.useQuery({ companyId }, { enabled: Boolean(companyId) });
   const assistant = trpc.hr.assistantPreview.useQuery({ companyId }, { enabled: Boolean(companyId) });
   const expiring = trpc.hiring.expiringLinks.useQuery({ companyId, withinHours: 24 }, { enabled: Boolean(companyId) });
   const aiInsights = trpc.ai.insights.useQuery({ companyId, status: "unread" }, { enabled: Boolean(companyId) });
   const soon = (label: string) => toast.info(`${label} estará disponible en la siguiente fase.`);
-  const candidates = recruitment.data ?? [];
+
+  const candidates = hiring.data ?? [];
   const docs = knowledge.data ?? [];
-  const displayName = user?.email === "alexa.torres@people-ai.test" ? user.name : "Alexa Torres";
-  return <DashboardLayout roleOverride="HR"><div className="mx-auto max-w-7xl space-y-7">
-    <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">PEOPLE AI · Talento Humano</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Buenos días, {displayName}</h1><p className="mt-2 text-sm text-slate-500">Este es el centro de gestión de Talento Humano de PEOPLE AI.</p></div><Badge className="w-fit border-0 bg-blue-50 px-3 py-1.5 text-blue-700">Empresa Demo — Talento Humano</Badge></div>
-    {aiInsights.data?.length ? <Card className="border-violet-200 bg-violet-50/50 shadow-sm"><CardContent className="p-5"><div className="flex items-center justify-between gap-3"><div><div className="flex items-center gap-2 text-sm font-semibold text-violet-950"><Bot className="h-4 w-4" />AI Insights</div><p className="mt-1 text-xs text-violet-800">Hallazgos que requieren atención humana, sin decisiones automáticas.</p></div><Badge variant="outline" className="border-violet-200 bg-white text-violet-800">{aiInsights.data.length} nuevas</Badge></div><div className="mt-4 grid gap-2 sm:grid-cols-2">{aiInsights.data.slice(0, 4).map(insight => <a key={insight.id} href={insight.processId ? `/hr/contrataciones/${insight.processId}` : "/hr/notifications"} className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-violet-400"><span className="font-medium">{insight.title}</span><span className="mt-1 block text-xs text-slate-500">{insight.description}</span></a>)}</div></CardContent></Card> : null}
-    {expiring.data?.length ? <Card className="border-amber-200 bg-amber-50/60 shadow-sm"><CardContent className="p-5"><div className="flex items-center gap-2 text-sm font-semibold text-amber-900"><AlertTriangle className="h-4 w-4" />Requieren atención</div><p className="mt-1 text-xs text-amber-800">Enlaces que expiran durante las próximas 24 horas.</p><div className="mt-4 grid gap-2 sm:grid-cols-2">{expiring.data.map(item => <a key={item.id} href={`/hr/contrataciones/${item.processId}`} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-amber-400"><span className="font-medium">{item.candidateName}</span><span className="mt-1 block text-xs text-slate-500">Expira {new Date(item.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}</span></a>)}</div></CardContent></Card> : null}
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[{label:"Procesos de contratación",value:candidates.length || "08",caption:"Procesos activos",icon:UserPlus,color:"text-blue-600 bg-blue-50"},{label:"Documentos pendientes",value:candidates.length ? candidates.reduce((sum,c)=>sum+(c.documentsRequired-c.documentsReceived),0) : "14",caption:"Documentos por recibir",icon:FileText,color:"text-amber-600 bg-amber-50"},{label:"Procesos completos",value:candidates.filter(c=>c.status==="complete").length || "05",caption:"Listos para revisión",icon:Users,color:"text-teal-600 bg-teal-50"},{label:"Consultas al asistente",value:"142",caption:"Consultas atendidas · demo",icon:Bot,color:"text-violet-600 bg-violet-50"}].map(item=><Card key={item.label} className="border-slate-200/80 shadow-sm"><CardContent className="p-5"><div className={`flex h-10 w-10 items-center justify-center rounded-xl ${item.color}`}><item.icon className="h-5 w-5" /></div><p className="mt-5 text-sm text-slate-500">{item.label}</p><p className="mt-1 text-3xl font-semibold tracking-tight">{item.value}</p><p className="mt-1 text-xs text-slate-400">{item.caption}</p></CardContent></Card>)}</div>
-    <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
-      <Card className="border-slate-200/80 shadow-sm"><CardHeader className="flex flex-row items-start justify-between border-b border-slate-100"><div><CardTitle className="flex items-center gap-2 text-base"><FileText className="h-4 w-4 text-blue-600" />Contratación</CardTitle><p className="mt-1 text-xs text-slate-500">Acompaña cada proceso hasta tener su expediente listo.</p></div><Button size="sm" onClick={() => soon("Nueva contratación")} className="bg-slate-950 text-white"><Plus className="mr-1 h-3.5 w-3.5" />Nueva contratación</Button></CardHeader><CardContent className="p-0"><div className="hidden grid-cols-[1.3fr_1fr_0.6fr_0.7fr] gap-3 border-b border-slate-100 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:grid"><span>Candidato</span><span>Cargo</span><span>Documentos</span><span>Estado</span></div>{recruitment.isLoading ? <div className="space-y-3 p-5"><Skeleton className="h-12 w-full" /><Skeleton className="h-12 w-full" /></div> : recruitment.error ? <p className="p-6 text-sm text-rose-600">No se pudo cargar contratación para este tenant.</p> : candidates.length ? candidates.map(candidate=><div key={candidate.id} className="grid gap-2 border-b border-slate-100 px-5 py-4 text-sm sm:grid-cols-[1.3fr_1fr_0.6fr_0.7fr] sm:items-center"><span className="font-medium text-slate-800">{candidate.candidateName}</span><span className="text-slate-500">{candidate.position}</span><span className="text-slate-500">{candidate.documentsReceived}/{candidate.documentsRequired}</span><Badge variant="outline" className="w-fit">{candidate.status === "complete" ? "Completo" : "Pendiente"}</Badge></div>) : <div className="p-8 text-center"><p className="text-sm font-medium text-slate-700">Aún no hay procesos registrados</p><p className="mt-1 text-xs text-slate-400">La lista se mostrará cuando se cree el primer proceso.</p></div>}<div className="flex justify-end p-4"><Button variant="ghost" size="sm" onClick={() => soon("Ver contrataciones")} className="text-xs">Ver contrataciones <ArrowUpRight className="ml-1 h-3.5 w-3.5" /></Button></div></CardContent></Card>
-      <Card className="overflow-hidden border-0 bg-slate-950 text-white shadow-xl"><CardContent className="relative p-6"><div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" /><div className="relative"><div className="flex items-center justify-between"><div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10"><Bot className="h-5 w-5 text-blue-200" /></div><Badge className="border-0 bg-white/10 text-blue-100">Demo</Badge></div><h2 className="mt-5 text-xl font-semibold">PEOPLE AI Assistant</h2><p className="mt-2 text-sm leading-6 text-slate-300">Responde preguntas frecuentes utilizando la información oficial de la empresa.</p><div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm"><p className="text-slate-400">Colaborador</p><p>¿Cómo solicito un certificado laboral?</p><div className="flex gap-2 border-t border-white/10 pt-3"><Bot className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" /><p className="text-slate-300">{assistant.isLoading ? "Consultando la demo…" : assistant.data?.content || "Puedes solicitarlo desde el canal habilitado de Talento Humano."}</p></div></div><Button onClick={() => setLocation("/hr/assistant")} className="mt-5 w-full border border-white/15 bg-white/10 text-white hover:bg-white/20"><MessageCircle className="mr-2 h-4 w-4" />Probar HR Assistant</Button></div></CardContent></Card>
-    </div>
-    <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]"><Card className="border-slate-200/80 shadow-sm"><CardHeader className="flex flex-row items-start justify-between"><div><CardTitle className="flex items-center gap-2 text-base"><BookOpen className="h-4 w-4 text-violet-600" />Base de conocimiento</CardTitle><p className="mt-1 text-xs text-slate-500">Información que posteriormente utilizará el asistente.</p></div><Button variant="outline" size="sm" onClick={() => soon("Agregar documento")}><Plus className="mr-1 h-3.5 w-3.5" />Agregar documento</Button></CardHeader><CardContent>{knowledge.isLoading ? <Skeleton className="h-16 w-full" /> : knowledge.error ? <p className="text-sm text-rose-600">No se pudo cargar la base de conocimiento.</p> : docs.length ? <div className="grid gap-3 sm:grid-cols-2">{docs.map(doc=><button key={doc.id} onClick={() => soon(doc.title)} className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 p-3 text-left transition hover:border-violet-300 hover:bg-violet-50/40"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50"><BookOpen className="h-4 w-4 text-violet-600" /></div><div><p className="text-sm font-medium text-slate-700">{doc.title}</p><p className="text-xs text-slate-400">{doc.category}</p></div></button>)}</div> : <p className="py-5 text-center text-sm text-slate-500">No hay documentos demo disponibles.</p>}</CardContent></Card><Card className="border-slate-200/80 shadow-sm"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Settings2 className="h-4 w-4 text-slate-600" />Canales e integraciones</CardTitle><p className="mt-1 text-xs text-slate-500">Un mismo asistente, varios canales futuros.</p></CardHeader><CardContent className="space-y-2">{[["Web","Disponible","bg-teal-500"],["WhatsApp","Próximamente","bg-amber-400"],["Microsoft Teams","Próximamente","bg-amber-400"]].map(([name,status,dot])=><div key={name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3"><span className="text-sm font-medium text-slate-700">{name}</span><span className="flex items-center gap-2 text-xs text-slate-500"><i className={`h-2 w-2 rounded-full ${dot}`} />{status}</span></div>)}</CardContent></Card></div>
-  </div></DashboardLayout>;
+  const displayName = user?.name || "Alexa Torres";
+
+  const isStatsLoading = stats.isLoading && hiring.isLoading;
+  const totalProcesses = stats.data?.totalProcesses ?? candidates.length;
+  const pendingDocuments = stats.data?.pendingDocuments ?? candidates.reduce((sum, c) => sum + Math.max(0, c.requiredCount - c.receivedCount), 0);
+  const completeProcesses = stats.data?.completeProcesses ?? candidates.filter(c => c.status === "complete" || (c.requiredCount > 0 && c.receivedCount >= c.requiredCount)).length;
+  const assistantQueries = stats.data?.assistantQueries ?? 0;
+
+  const metricCards = [
+    {
+      label: "Procesos de contratación",
+      value: totalProcesses,
+      caption: "Procesos activos",
+      icon: UserPlus,
+      badgeStyle: "bg-gradient-to-br from-blue-100/90 via-blue-50 to-white text-blue-600 border border-blue-200/60 shadow-[0_4px_14px_rgba(59,130,246,0.12)]",
+      dotColor: "bg-blue-500",
+    },
+    {
+      label: "Documentos pendientes",
+      value: pendingDocuments,
+      caption: "Documentos por recibir",
+      icon: FileText,
+      badgeStyle: "bg-gradient-to-br from-amber-100/90 via-amber-50 to-white text-amber-600 border border-amber-200/60 shadow-[0_4px_14px_rgba(245,158,11,0.12)]",
+      dotColor: "bg-amber-500",
+    },
+    {
+      label: "Procesos completos",
+      value: completeProcesses,
+      caption: "Listos para revisión",
+      icon: Users,
+      badgeStyle: "bg-gradient-to-br from-emerald-100/90 via-emerald-50 to-white text-emerald-600 border border-emerald-200/60 shadow-[0_4px_14px_rgba(16,185,129,0.12)]",
+      dotColor: "bg-emerald-500",
+    },
+    {
+      label: "Consultas al asistente",
+      value: assistantQueries,
+      caption: "Consultas atendidas",
+      icon: Bot,
+      badgeStyle: "bg-gradient-to-br from-violet-100/90 via-violet-50 to-white text-violet-600 border border-violet-200/60 shadow-[0_4px_14px_rgba(139,92,246,0.12)]",
+      dotColor: "bg-violet-500",
+    },
+  ];
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return "Buenos días";
+    if (hour >= 12 && hour < 19) return "Buenas tardes";
+    return "Buenas noches";
+  };
+
+  return (
+    <DashboardLayout roleOverride="HR">
+      <div className="mx-auto max-w-7xl space-y-7">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-950">{getGreeting()}, {displayName}</h1>
+          <p className="mt-2 text-sm text-slate-500">Este es el centro de gestión de Talento Humano de PEOPLE AI.</p>
+        </div>
+
+        {aiInsights.data?.length ? (
+          <Card className="border-violet-200 bg-violet-50/50 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-950">
+                    <Bot className="h-4 w-4" />AI Insights
+                  </div>
+                  <p className="mt-1 text-xs text-violet-800">Hallazgos que requieren atención humana, sin decisiones automáticas.</p>
+                </div>
+                <Badge variant="outline" className="border-violet-200 bg-white text-violet-800">
+                  {aiInsights.data.length} nuevas
+                </Badge>
+              </div>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {aiInsights.data.slice(0, 4).map(insight => (
+                  <a
+                    key={insight.id}
+                    href={insight.processId ? `/hr/contrataciones/${insight.processId}` : "/hr/notifications"}
+                    className="rounded-lg border border-violet-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-violet-400 transition"
+                  >
+                    <span className="font-medium">{insight.title}</span>
+                    <span className="mt-1 block text-xs text-slate-500">{insight.description}</span>
+                  </a>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {expiring.data?.length ? (
+          <Card className="border-amber-200 bg-amber-50/60 shadow-sm">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+                <AlertTriangle className="h-4 w-4" />Requieren atención
+              </div>
+              <p className="mt-1 text-xs text-amber-800">Enlaces que expiran durante las próximas 24 horas.</p>
+              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                {expiring.data.map(item => (
+                  <a
+                    key={item.id}
+                    href={`/hr/contrataciones/${item.processId}`}
+                    className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-slate-800 hover:border-amber-400 transition"
+                  >
+                    <span className="font-medium">{item.candidateName}</span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      Expira {new Date(item.expiresAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" })}
+                    </span>
+                  </a>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* KPIs */}
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map(item => (
+            <Card key={item.label} className="group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md">
+              <div className="flex items-center gap-3.5">
+                {/* Logo a la izquierda con fondo suave y brillo */}
+                <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105 ${item.badgeStyle}`}>
+                  <item.icon className="h-5 w-5 stroke-[2.2]" />
+                </div>
+
+                {/* Contenido derecho compacto */}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-slate-600">{item.label}</p>
+                  <div className="mt-0.5 flex items-baseline">
+                    {isStatsLoading ? (
+                      <Skeleton className="h-7 w-12 rounded-md" />
+                    ) : (
+                      <span className="text-2xl font-extrabold tracking-tight text-slate-950 tabular-nums">
+                        {item.value}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${item.dotColor}`} />
+                    <span className="truncate font-medium">{item.caption}</span>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+
+        {/* Contratación & Assistant */}
+        <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="flex flex-row items-start justify-between border-b border-slate-100">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <FileText className="h-4 w-4 text-blue-600" />Contratación
+                </CardTitle>
+                <p className="mt-1 text-xs text-slate-500">Acompaña cada proceso hasta tener su expediente listo.</p>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setLocation("/hr/contrataciones")}
+                className="bg-slate-950 text-white hover:bg-slate-800"
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />Nueva contratación
+              </Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="hidden grid-cols-[1.3fr_1fr_0.6fr_0.7fr_auto] gap-3 border-b border-slate-100 px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:grid">
+                <span>Candidato</span>
+                <span>Cargo</span>
+                <span>Documentos</span>
+                <span>Estado</span>
+                <span />
+              </div>
+
+              {hiring.isLoading ? (
+                <div className="space-y-3 p-5">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              ) : hiring.error ? (
+                <p className="p-6 text-sm text-rose-600">No se pudo cargar la información de contratación.</p>
+              ) : candidates.length ? (
+                candidates.slice(0, 5).map(candidate => (
+                  <div
+                    key={candidate.id}
+                    onClick={() => setLocation(`/hr/contrataciones/${candidate.id}`)}
+                    className="grid cursor-pointer gap-2 border-b border-slate-100 px-5 py-4 text-sm transition hover:bg-slate-50/80 sm:grid-cols-[1.3fr_1fr_0.6fr_0.7fr_auto] sm:items-center"
+                  >
+                    <span className="font-medium text-slate-800">{candidate.candidateName}</span>
+                    <span className="text-slate-500">{candidate.positionName}</span>
+                    <span className="text-slate-500">
+                      {candidate.receivedCount}/{candidate.requiredCount}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "w-fit font-normal",
+                        candidate.status === "complete" || (candidate.requiredCount > 0 && candidate.receivedCount >= candidate.requiredCount)
+                          ? "border-teal-200 bg-teal-50 text-teal-700"
+                          : candidate.status === "in_review"
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-amber-200 bg-amber-50 text-amber-700"
+                      )}
+                    >
+                      {candidate.status === "complete" ? "Completo" : candidate.status === "in_review" ? "En revisión" : "Pendiente"}
+                    </Badge>
+                    <ArrowUpRight className="hidden h-4 w-4 text-slate-400 sm:block" />
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center">
+                  <p className="text-sm font-medium text-slate-700">Aún no hay procesos registrados</p>
+                  <p className="mt-1 text-xs text-slate-400">Crea el primer proceso para iniciar el seguimiento de expedientes.</p>
+                </div>
+              )}
+
+              <div className="flex justify-end p-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setLocation("/hr/contrataciones")}
+                  className="text-xs text-slate-600 hover:text-slate-900"
+                >
+                  Ver contrataciones <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="overflow-hidden border-0 bg-slate-950 text-white shadow-xl">
+            <CardContent className="relative p-6">
+              <div className="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-blue-500/20 blur-3xl" />
+              <div className="relative">
+                <div className="flex items-center justify-between">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10">
+                    <Bot className="h-5 w-5 text-blue-200" />
+                  </div>
+                  <Badge className="border-0 bg-teal-500/20 text-teal-200">Asistente</Badge>
+                </div>
+                <h2 className="mt-5 text-xl font-semibold">PEOPLE AI Assistant</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-300">
+                  Responde preguntas frecuentes utilizando la información oficial de la empresa.
+                </p>
+                <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+                  <p className="text-slate-400">Colaborador</p>
+                  <p>¿Cómo solicito un certificado laboral?</p>
+                  <div className="flex gap-2 border-t border-white/10 pt-3">
+                    <Bot className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" />
+                    <p className="text-slate-300">
+                      {assistant.isLoading
+                        ? "Cargando respuesta…"
+                        : assistant.data?.content || "Puedes solicitar certificados laborales directamente desde el módulo de Talento Humano."}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => setLocation("/hr/assistant")}
+                  className="mt-5 w-full border border-white/15 bg-white/10 text-white hover:bg-white/20"
+                >
+                  <MessageCircle className="mr-2 h-4 w-4" />Probar HR Assistant
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Base de conocimiento & Canales */}
+        <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader className="flex flex-row items-start justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <BookOpen className="h-4 w-4 text-violet-600" />Base de conocimiento
+                </CardTitle>
+                <p className="mt-1 text-xs text-slate-500">Información que posteriormente utilizará el asistente.</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => soon("Agregar documento")}>
+                <Plus className="mr-1 h-3.5 w-3.5" />Agregar documento
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {knowledge.isLoading ? (
+                <Skeleton className="h-16 w-full" />
+              ) : knowledge.error ? (
+                <p className="text-sm text-rose-600">No se pudo cargar la base de conocimiento.</p>
+              ) : docs.length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {docs.map(doc => (
+                    <button
+                      key={doc.id}
+                      onClick={() => soon(doc.title)}
+                      className="flex items-center gap-3 rounded-xl border border-dashed border-slate-200 p-3 text-left transition hover:border-violet-300 hover:bg-violet-50/40"
+                    >
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50">
+                        <BookOpen className="h-4 w-4 text-violet-600" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-slate-700">{doc.title}</p>
+                        <p className="text-xs text-slate-400">{doc.category}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-5 text-center text-sm text-slate-500">No hay documentos registrados.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200/80 shadow-sm">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Settings2 className="h-4 w-4 text-slate-600" />Canales e integraciones
+              </CardTitle>
+              <p className="mt-1 text-xs text-slate-500">Un mismo asistente, varios canales futuros.</p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {[
+                ["Web", "Disponible", "bg-teal-500"],
+                ["WhatsApp", "Próximamente", "bg-amber-400"],
+                ["Microsoft Teams", "Próximamente", "bg-amber-400"],
+              ].map(([name, status, dot]) => (
+                <div key={name} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-3">
+                  <span className="text-sm font-medium text-slate-700">{name}</span>
+                  <span className="flex items-center gap-2 text-xs text-slate-500">
+                    <i className={`h-2 w-2 rounded-full ${dot}`} />
+                    {status}
+                  </span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
 }
+
