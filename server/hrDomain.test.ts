@@ -75,4 +75,15 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
     expect(updated.items.length).toBe(2);
     expect(updated.items[0].title).toBe("Cédula de Ciudadanía");
   });
+
+  it("permite ejecutar el flujo de creación y eliminación de un cargo", async () => {
+    const { createPosition, deletePosition } = await import("./hrDomain");
+    const testName = `Cargo Test ${Date.now()}`;
+    const newId = await createPosition(4, testName, "Descripción de prueba para test");
+    expect(typeof newId).toBe("number");
+    expect(newId).toBeGreaterThan(0);
+
+    const deleteRes = await deletePosition(4, newId);
+    expect(deleteRes).toEqual({ success: true, id: newId });
+  });
 });
