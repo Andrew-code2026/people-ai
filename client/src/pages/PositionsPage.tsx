@@ -108,6 +108,8 @@ export default function PositionsPage() {
 
   // Dialog states
   const [isNewPositionOpen, setIsNewPositionOpen] = useState(false);
+  const [isDeletePositionOpen, setIsDeletePositionOpen] = useState(false);
+  const [positionToDelete, setPositionToDelete] = useState<{ id: number; name: string } | null>(null);
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
   const [isEditMasterStandardOpen, setIsEditMasterStandardOpen] = useState(false);
   const [isEditDocOpen, setIsEditDocOpen] = useState(false);
@@ -164,10 +166,14 @@ export default function PositionsPage() {
     );
   }, [positionsQuery.data, searchFilter]);
 
-  // Set default selected position
+  // Set default selected position and handle selection updates
   useEffect(() => {
-    if (!selectedPositionId && positionsQuery.data && positionsQuery.data.length > 0) {
-      setSelectedPositionId(positionsQuery.data[0].id);
+    if (positionsQuery.data && positionsQuery.data.length > 0) {
+      if (!selectedPositionId || !positionsQuery.data.some((p) => p.id === selectedPositionId)) {
+        setSelectedPositionId(positionsQuery.data[0].id);
+      }
+    } else if (positionsQuery.data && positionsQuery.data.length === 0) {
+      setSelectedPositionId(null);
     }
   }, [positionsQuery.data, selectedPositionId]);
 
@@ -212,6 +218,19 @@ export default function PositionsPage() {
     },
     onError: (err) => {
       toast.error(err.message || "Error al crear el cargo");
+    },
+  });
+
+  const deletePositionMutation = trpc.positions.delete.useMutation({
+    onSuccess: () => {
+      utils.positions.list.invalidate();
+      utils.templates.list.invalidate();
+      setIsDeletePositionOpen(false);
+      setPositionToDelete(null);
+      toast.success("Cargo eliminado exitosamente");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Error al eliminar el cargo");
     },
   });
 
@@ -308,6 +327,20 @@ export default function PositionsPage() {
       companyId,
       name: newPositionName.trim(),
       description: newPositionDescription.trim() || undefined,
+    });
+  };
+
+  const handlePromptDeletePosition = (pos: { id: number; name: string }, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setPositionToDelete(pos);
+    setIsDeletePositionOpen(true);
+  };
+
+  const handleConfirmDeletePosition = () => {
+    if (!positionToDelete) return;
+    deletePositionMutation.mutate({
+      companyId,
+      positionId: positionToDelete.id,
     });
   };
 
@@ -625,10 +658,18 @@ export default function PositionsPage() {
                     const hasDefault = posTemplates.some((t) => t.name === DEFAULT_TEMPLATE_NAME);
 
                     return (
-                      <button
+                      <div
                         key={position.id}
+                        role="button"
+                        tabIndex={0}
                         onClick={() => setSelectedPositionId(position.id)}
-                        className={`group flex w-full flex-col items-start rounded-xl border p-3.5 text-left transition-all ${
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedPositionId(position.id);
+                          }
+                        }}
+                        className={`group relative flex w-full flex-col items-start rounded-xl border p-3.5 text-left transition-all cursor-pointer select-none ${
                           isSelected
                             ? "border-blue-500 bg-blue-50/60 shadow-sm ring-1 ring-blue-500/30"
                             : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80"
@@ -636,17 +677,29 @@ export default function PositionsPage() {
                       >
                         <div className="flex w-full items-start justify-between gap-2">
                           <span
-                            className={`font-semibold text-sm ${
+                            className={`font-semibold text-sm line-clamp-1 ${
                               isSelected ? "text-blue-950" : "text-slate-800"
                             }`}
                           >
                             {position.name}
                           </span>
-                          <Briefcase
-                            className={`h-4 w-4 shrink-0 transition ${
-                              isSelected ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"
-                            }`}
-                          />
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => handlePromptDeletePosition(position, e)}
+                              className="h-6 w-6 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title={`Eliminar cargo "${position.name}"`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                            <Briefcase
+                              className={`h-4 w-4 shrink-0 transition ${
+                                isSelected ? "text-blue-600" : "text-slate-400 group-hover:text-slate-600"
+                              }`}
+                            />
+                          </div>
                         </div>
 
                         {position.description && (
@@ -674,7 +727,7 @@ export default function PositionsPage() {
                             {posTemplates.length} plantilla{posTemplates.length !== 1 ? "s" : ""}
                           </span>
                         </div>
-                      </button>
+                      </div>
                     );
                   })
                 )}
@@ -698,6 +751,16 @@ export default function PositionsPage() {
                           <Badge variant="outline" className="text-xs font-normal">
                             ID: {selectedPosition.id}
                           </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePromptDeletePosition(selectedPosition)}
+                            className="h-6 px-2 text-xs font-medium text-red-600 border-red-200 bg-red-50/40 hover:bg-red-50 hover:text-red-700 hover:border-red-300 transition-colors ml-1"
+                            title="Eliminar este cargo"
+                          >
+                            <Trash2 className="mr-1 h-3 w-3 text-red-500" />
+                            Eliminar cargo
+                          </Button>
                         </div>
                         <CardTitle className="mt-1 text-xl font-bold text-slate-900">
                           {selectedPosition.name}
@@ -1457,6 +1520,45 @@ export default function PositionsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG: Confirmar Eliminación de Cargo */}
+      <Dialog open={isDeletePositionOpen} onOpenChange={setIsDeletePositionOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center gap-2 text-red-600">
+              <Trash2 className="h-5 w-5" />
+              <DialogTitle className="text-lg font-bold text-slate-900">
+                Eliminar Cargo
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-slate-500 pt-2">
+              ¿Estás seguro de que deseas eliminar el cargo{" "}
+              <span className="font-semibold text-slate-900">"{positionToDelete?.name}"</span>?
+              Esta acción archivará el cargo y sus plantillas de documentos asociadas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeletePositionOpen(false)}
+              disabled={deletePositionMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDeletePosition}
+              disabled={deletePositionMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white shadow-sm"
+            >
+              {deletePositionMutation.isPending ? "Eliminando..." : "Eliminar Cargo"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </DashboardLayout>

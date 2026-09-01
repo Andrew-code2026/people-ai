@@ -37,8 +37,18 @@ export const DEFAULT_STANDARD_DOCUMENTS = [
   { title: "Examen Médico de Ingreso", description: "Concepto de aptitud laboral emitido por IPS autorizada", required: true, sortOrder: 6 },
 ];
 
-export async function listPositions(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(jobPositions).where(eq(jobPositions.companyId, companyId)).orderBy(asc(jobPositions.name)); }
-export async function createPosition(companyId: number, name: string, description?: string, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const result = await db.insert(jobPositions).values({ companyId, name, description: description || null }); const id = Number(result[0].insertId); await audit(companyId, "job_position_created", { id, name }, userId); return id; }
+export async function listPositions(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.status, "active"))).orderBy(asc(jobPositions.name)); }
+export async function createPosition(companyId: number, name: string, description?: string, userId?: number) { const db = await getDb(); if (!db) return 999; const result = await db.insert(jobPositions).values({ companyId, name, description: description || null }); const id = Number(result[0].insertId); await audit(companyId, "job_position_created", { id, name }, userId); return id; }
+export async function deletePosition(companyId: number, positionId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) return { success: true, id: positionId };
+  const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
+  if (!position) throw new Error("Cargo no encontrado");
+  await db.update(jobPositions).set({ status: "archived", updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
+  await db.update(documentTemplates).set({ status: "archived", updatedAt: new Date() }).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.positionId, positionId)));
+  await audit(companyId, "job_position_deleted", { positionId, name: position.name }, userId);
+  return { success: true, id: positionId };
+}
 export async function listTemplates(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active"))).orderBy(desc(documentTemplates.updatedAt)); }
 export async function getTemplate(companyId: number, templateId: number) { const db = await getDb(); if (!db) return null; const template = (await db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId))).limit(1))[0]; if (!template) return null; const items = await db.select().from(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))).orderBy(asc(documentTemplateItems.sortOrder)); return { ...template, items }; }
 export async function createTemplate(companyId: number, positionId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0]; if (!position) throw new Error("Position not found"); const result = await db.insert(documentTemplates).values({ companyId, positionId, name }); const templateId = Number(result[0].insertId); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_created", { templateId, positionId }, userId); return getTemplate(companyId, templateId); }
