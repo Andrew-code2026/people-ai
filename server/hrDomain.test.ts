@@ -45,5 +45,34 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
     expect(typeof stats.completeProcesses).toBe("number");
     expect(typeof stats.assistantQueries).toBe("number");
   });
-});
 
+  it("garantiza la definición estándar de la plantilla por defecto 'Expediente de Ingreso Estándar'", async () => {
+    const { DEFAULT_TEMPLATE_NAME, DEFAULT_STANDARD_DOCUMENTS } = await import("./hrDomain");
+    expect(DEFAULT_TEMPLATE_NAME).toBe("Expediente de Ingreso Estándar");
+    expect(DEFAULT_STANDARD_DOCUMENTS.length).toBe(6);
+    expect(DEFAULT_STANDARD_DOCUMENTS.some(d => d.title.includes("Cédula"))).toBe(true);
+    expect(DEFAULT_STANDARD_DOCUMENTS.some(d => d.title.includes("Hoja de Vida"))).toBe(true);
+    expect(DEFAULT_STANDARD_DOCUMENTS.some(d => d.title.includes("EPS"))).toBe(true);
+    expect(DEFAULT_STANDARD_DOCUMENTS.some(d => d.title.includes("Pensiones"))).toBe(true);
+    expect(DEFAULT_STANDARD_DOCUMENTS.some(d => d.title.includes("Examen Médico"))).toBe(true);
+  });
+
+  it("permite consultar la plantilla estándar maestra de la empresa", async () => {
+    const { getMasterStandardTemplate } = await import("./hrDomain");
+    const master = await getMasterStandardTemplate(4);
+    expect(master).toHaveProperty("items");
+    expect(Array.isArray(master.items)).toBe(true);
+    expect(master.items.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("permite actualizar la plantilla estándar maestra de la empresa", async () => {
+    const { updateMasterStandardTemplate } = await import("./hrDomain");
+    const newItems = [
+      { title: "Cédula de Ciudadanía", description: "PDF legible", required: true, sortOrder: 1 },
+      { title: "Hoja de Vida", description: "Formato actualizado", required: true, sortOrder: 2 },
+    ];
+    const updated = await updateMasterStandardTemplate(4, newItems);
+    expect(updated.items.length).toBe(2);
+    expect(updated.items[0].title).toBe("Cédula de Ciudadanía");
+  });
+});
