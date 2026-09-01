@@ -18,5 +18,178 @@ export default function HiringPage() {
   const [fullName, setFullName] = useState(""); const [identificationNumber, setIdentificationNumber] = useState(""); const [email, setEmail] = useState("");
   const create = trpc.hiring.create.useMutation({ onSuccess: () => { utils.hiring.list.invalidate(); toast.success("Contratación creada con snapshot de documentos"); setFullName(""); setIdentificationNumber(""); setEmail(""); } });
   const rows = hiring.data?.filter(row => (statusFilter === "all" || row.status === statusFilter) && (positionFilter === "all" || String(row.positionId) === positionFilter)) || [];
-  return <DashboardLayout roleOverride="HR"><div className="mx-auto max-w-6xl space-y-6"><div className="flex items-end justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Talento Humano</p><h1 className="mt-2 text-3xl font-semibold">Contrataciones</h1><p className="mt-2 text-sm text-slate-500">Crea procesos y da seguimiento al expediente de cada candidato.</p></div><Button onClick={() => document.getElementById("new-hiring")?.scrollIntoView({ behavior: "smooth" })} className="bg-slate-950 text-white"><Plus className="mr-2 h-4 w-4" />Nueva contratación</Button></div><Card id="new-hiring"><CardHeader><CardTitle className="text-base">Nueva contratación</CardTitle></CardHeader><CardContent className="grid gap-5 md:grid-cols-2"><div className="space-y-4"><div><Label>Nombre completo</Label><Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Carlos Pérez" className="mt-2" /></div><div><Label>Número de identificación</Label><Input value={identificationNumber} onChange={e => setIdentificationNumber(e.target.value)} placeholder="1020304050" className="mt-2" /></div><div><Label>Correo electrónico</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="carlos@ejemplo.com" className="mt-2" /></div><div><Label>Cargo</Label><Select value={positionId} onValueChange={setPositionId}><SelectTrigger className="mt-2"><SelectValue placeholder="Seleccionar cargo" /></SelectTrigger><SelectContent>{positions.data?.map(position => <SelectItem key={position.id} value={String(position.id)}>{position.name}</SelectItem>)}</SelectContent></Select></div><Button disabled={!fullName || !identificationNumber || !email || !selectedTemplate || create.isPending} onClick={() => selectedTemplate && create.mutate({ companyId, fullName, identificationNumber, email, positionId: Number(positionId), templateId: selectedTemplate.id })} className="w-full bg-blue-600 text-white">Crear contratación</Button></div><div className="rounded-2xl bg-slate-50 p-5"><p className="text-sm font-semibold">Documentos requeridos</p><p className="mt-1 text-xs text-slate-500">Se copiarán automáticamente como snapshot.</p><div className="mt-4 space-y-2">{template.data?.items.map(item => <div key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm"><FileText className="h-4 w-4 text-blue-600" />{item.title}<span className="ml-auto text-xs text-slate-400">{item.required ? "Obligatorio" : "Opcional"}</span></div>)}</div></div></CardContent></Card><Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle className="text-base">Procesos recientes</CardTitle><p className="mt-1 text-sm text-slate-500">{rows.length} proceso(s) en este tenant.</p></div><div className="flex gap-2"><Select value={statusFilter} onValueChange={setStatusFilter}><SelectTrigger className="w-36"><SelectValue placeholder="Estado" /></SelectTrigger><SelectContent><SelectItem value="all">Todos los estados</SelectItem><SelectItem value="pending">Pendiente</SelectItem><SelectItem value="in_review">En revisión</SelectItem><SelectItem value="complete">Completo</SelectItem></SelectContent></Select><Select value={positionFilter} onValueChange={setPositionFilter}><SelectTrigger className="w-40"><SelectValue placeholder="Cargo" /></SelectTrigger><SelectContent><SelectItem value="all">Todos los cargos</SelectItem>{positions.data?.map(position => <SelectItem key={position.id} value={String(position.id)}>{position.name}</SelectItem>)}</SelectContent></Select></div></CardHeader><CardContent className="p-0"><div className="hidden grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] gap-3 border-b px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:grid"><span>Candidato</span><span>Cargo</span><span>Progreso</span><span>Estado</span><span>Fecha</span><span /></div>{rows.length ? rows.map(process => <Link key={process.id} href={`/hr/contrataciones/${process.id}`} className="grid gap-2 border-b px-5 py-4 text-sm transition hover:bg-slate-50 sm:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] sm:items-center"><span className="flex items-center gap-2 font-medium"><UserRound className="h-4 w-4 text-slate-400" />{process.candidateName}</span><span className="text-slate-500">{process.positionName}</span><span className="text-slate-500">{process.receivedCount}/{process.requiredCount}</span><span className="text-slate-500">{process.status === "in_review" ? "En revisión" : process.status}</span><span className="text-xs text-slate-400">{new Date(process.createdAt).toLocaleDateString("es-CO")}</span><ArrowUpRight className="h-4 w-4 text-slate-400" /></Link>) : <div className="p-8 text-center text-sm text-slate-500">No hay procesos con estos filtros.</div>}</CardContent></Card></div></DashboardLayout>;
+  return (
+    <DashboardLayout roleOverride="HR">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Talento Humano</p>
+            <h1 className="mt-2 text-3xl font-semibold">Contrataciones</h1>
+            <p className="mt-2 text-sm text-slate-500">Crea procesos y da seguimiento al expediente de cada candidato.</p>
+          </div>
+          <Button
+            onClick={() => document.getElementById("new-hiring")?.scrollIntoView({ behavior: "smooth" })}
+            className="bg-slate-950 text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />Nueva contratación
+          </Button>
+        </div>
+
+        <Card id="new-hiring">
+          <CardHeader>
+            <CardTitle className="text-base">Nueva contratación</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-5 md:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <Label>Nombre completo</Label>
+                <Input
+                  value={fullName}
+                  onChange={e => setFullName(e.target.value)}
+                  placeholder="Carlos Pérez"
+                  className="mt-2"
+                />
+              </div>
+              <div>
+                <Label>Número de identificación</Label>
+                <Input
+                  value={identificationNumber}
+                  onChange={e => setIdentificationNumber(e.target.value)}
+                  placeholder="1020304050"
+                  className="mt-2"
+                />
+              </div>
+              <div>
+                <Label>Correo electrónico</Label>
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="carlos@ejemplo.com"
+                  className="mt-2"
+                />
+              </div>
+              <div>
+                <Label>Cargo</Label>
+                <Select value={positionId} onValueChange={setPositionId}>
+                  <SelectTrigger className="mt-2 w-full">
+                    <SelectValue placeholder="Seleccionar cargo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {positions.data?.map(position => (
+                      <SelectItem key={position.id} value={String(position.id)}>
+                        {position.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button
+                disabled={!fullName || !identificationNumber || !email || !selectedTemplate || create.isPending}
+                onClick={() =>
+                  selectedTemplate &&
+                  create.mutate({
+                    companyId,
+                    fullName,
+                    identificationNumber,
+                    email,
+                    positionId: Number(positionId),
+                    templateId: selectedTemplate.id,
+                  })
+                }
+                className="w-full bg-blue-600 text-white"
+              >
+                Crear contratación
+              </Button>
+            </div>
+            <div className="rounded-2xl bg-slate-50 p-5">
+              <p className="text-sm font-semibold">Documentos requeridos</p>
+              <p className="mt-1 text-xs text-slate-500">Se copiarán automáticamente como snapshot.</p>
+              <div className="mt-4 space-y-2">
+                {template.data?.items.map(item => (
+                  <div key={item.id} className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm">
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    {item.title}
+                    <span className="ml-auto text-xs text-slate-400">{item.required ? "Obligatorio" : "Opcional"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base">Procesos recientes</CardTitle>
+              <p className="mt-1 text-sm text-slate-500">{rows.length} proceso(s) en este tenant.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[190px]">
+                  <SelectValue placeholder="Estado" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los estados</SelectItem>
+                  <SelectItem value="pending">Pendiente</SelectItem>
+                  <SelectItem value="in_review">En revisión</SelectItem>
+                  <SelectItem value="complete">Completo</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={positionFilter} onValueChange={setPositionFilter}>
+                <SelectTrigger className="w-[190px]">
+                  <SelectValue placeholder="Cargo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los cargos</SelectItem>
+                  {positions.data?.map(position => (
+                    <SelectItem key={position.id} value={String(position.id)}>
+                      {position.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="hidden grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] gap-3 border-b px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400 sm:grid">
+              <span>Candidato</span>
+              <span>Cargo</span>
+              <span>Progreso</span>
+              <span>Estado</span>
+              <span>Fecha</span>
+              <span />
+            </div>
+            {rows.length ? (
+              rows.map(process => (
+                <Link
+                  key={process.id}
+                  href={`/hr/contrataciones/${process.id}`}
+                  className="grid gap-2 border-b px-5 py-4 text-sm transition hover:bg-slate-50 sm:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] sm:items-center"
+                >
+                  <span className="flex items-center gap-2 font-medium">
+                    <UserRound className="h-4 w-4 text-slate-400" />
+                    {process.candidateName}
+                  </span>
+                  <span className="text-slate-500">{process.positionName}</span>
+                  <span className="text-slate-500">
+                    {process.receivedCount}/{process.requiredCount}
+                  </span>
+                  <span className="text-slate-500">
+                    {process.status === "in_review" ? "En revisión" : process.status}
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    {new Date(process.createdAt).toLocaleDateString("es-CO")}
+                  </span>
+                  <ArrowUpRight className="h-4 w-4 text-slate-400" />
+                </Link>
+              ))
+            ) : (
+              <div className="p-8 text-center text-sm text-slate-500">No hay procesos con estos filtros.</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </DashboardLayout>
+  );
 }
