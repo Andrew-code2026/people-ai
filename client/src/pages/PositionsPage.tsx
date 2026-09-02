@@ -38,6 +38,9 @@ import {
   ArrowDown,
   RotateCcw,
   Sliders,
+  ArrowLeft,
+  Info,
+  Check,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
@@ -111,9 +114,16 @@ export default function PositionsPage() {
   const [isDeletePositionOpen, setIsDeletePositionOpen] = useState(false);
   const [positionToDelete, setPositionToDelete] = useState<{ id: number; name: string } | null>(null);
   const [isNewTemplateOpen, setIsNewTemplateOpen] = useState(false);
-  const [isEditMasterStandardOpen, setIsEditMasterStandardOpen] = useState(false);
+  const [isMasterStandardView, setIsMasterStandardView] = useState(false);
   const [isEditDocOpen, setIsEditDocOpen] = useState(false);
   const [isRenameTemplateOpen, setIsRenameTemplateOpen] = useState(false);
+
+  // Edit single document in Master Standard state
+  const [isEditMasterDocDialogOpen, setIsEditMasterDocDialogOpen] = useState(false);
+  const [editingMasterIndex, setEditingMasterIndex] = useState<number | null>(null);
+  const [editingMasterDocTitle, setEditingMasterDocTitle] = useState("");
+  const [editingMasterDocDesc, setEditingMasterDocDesc] = useState("");
+  const [editingMasterDocRequired, setEditingMasterDocRequired] = useState(true);
 
   // New position form
   const [newPositionName, setNewPositionName] = useState("");
@@ -287,7 +297,7 @@ export default function PositionsPage() {
       if (selectedTemplateId) {
         utils.templates.get.invalidate({ companyId, templateId: selectedTemplateId });
       }
-      setIsEditMasterStandardOpen(false);
+      setIsMasterStandardView(false);
       toast.success("Plantilla estándar de la empresa guardada exitosamente");
     },
     onError: (err) => {
@@ -504,40 +514,88 @@ export default function PositionsPage() {
     });
   };
 
+  const handleEnterMasterStandardView = () => {
+    if (masterStandardQuery.data?.items) {
+      setMasterItems(
+        masterStandardQuery.data.items.map((item, idx) => ({
+          title: item.title,
+          description: item.description || undefined,
+          required: item.required,
+          sortOrder: item.sortOrder || idx + 1,
+        }))
+      );
+    }
+    setIsMasterStandardView(true);
+  };
+
+  const handleOpenEditMasterDoc = (index: number) => {
+    const doc = masterItems[index];
+    if (!doc) return;
+    setEditingMasterIndex(index);
+    setEditingMasterDocTitle(doc.title);
+    setEditingMasterDocDesc(doc.description || "");
+    setEditingMasterDocRequired(doc.required);
+    setIsEditMasterDocDialogOpen(true);
+  };
+
+  const handleSaveMasterDocEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingMasterIndex === null || !editingMasterDocTitle.trim()) return;
+    setMasterItems((prev) =>
+      prev.map((item, idx) =>
+        idx === editingMasterIndex
+          ? {
+              ...item,
+              title: editingMasterDocTitle.trim(),
+              description: editingMasterDocDesc.trim() || undefined,
+              required: editingMasterDocRequired,
+            }
+          : item
+      )
+    );
+    setIsEditMasterDocDialogOpen(false);
+    setEditingMasterIndex(null);
+    toast.success("Documento actualizado en la lista");
+  };
+
   const handleAddMasterItem = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMasterDocTitle.trim()) return;
-    setMasterItems([
-      ...masterItems,
+    setMasterItems((prev) => [
+      ...prev,
       {
         title: newMasterDocTitle.trim(),
         description: newMasterDocDesc.trim() || undefined,
         required: newMasterDocRequired,
-        sortOrder: masterItems.length + 1,
+        sortOrder: prev.length + 1,
       },
     ]);
     setNewMasterDocTitle("");
     setNewMasterDocDesc("");
     setNewMasterDocRequired(true);
+    toast.success("Documento añadido a la lista estándar");
   };
 
   const handleRemoveMasterItem = (index: number) => {
-    setMasterItems(masterItems.filter((_, idx) => idx !== index));
+    setMasterItems((prev) => prev.filter((_, idx) => idx !== index));
+    toast.info("Documento eliminado de la lista estándar");
   };
 
   const handleMoveMasterItem = (index: number, direction: "up" | "down") => {
-    const newItems = [...masterItems];
-    const targetIndex = direction === "up" ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= newItems.length) return;
-    const temp = newItems[index];
-    newItems[index] = newItems[targetIndex];
-    newItems[targetIndex] = temp;
-    setMasterItems(newItems);
+    setMasterItems((prev) => {
+      const newItems = [...prev];
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= newItems.length) return prev;
+      const temp = newItems[index];
+      newItems[index] = newItems[targetIndex];
+      newItems[targetIndex] = temp;
+      return newItems;
+    });
   };
 
   const handleToggleMasterItemRequired = (index: number) => {
-    setMasterItems(
-      masterItems.map((item, idx) =>
+    setMasterItems((prev) =>
+      prev.map((item, idx) =>
         idx === index ? { ...item, required: !item.required } : item
       )
     );
@@ -553,7 +611,7 @@ export default function PositionsPage() {
           sortOrder: idx + 1,
         }))
       );
-      toast.info("Valores normativos cargados en el formulario");
+      toast.info("Valores normativos cargados en la plantilla estándar");
     }
   };
 
@@ -575,6 +633,470 @@ export default function PositionsPage() {
   };
 
   const isDefaultTemplate = templateQuery.data?.name === DEFAULT_TEMPLATE_NAME;
+
+  if (isMasterStandardView) {
+    return (
+      <DashboardLayout roleOverride="HR">
+        <div className="mx-auto max-w-7xl space-y-6 pb-12">
+          {/* Navigation Breadcrumb / Back Button */}
+          <div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsMasterStandardView(false)}
+              className="-ml-2 mb-3 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            >
+              <ArrowLeft className="mr-1.5 h-4 w-4" />
+              Volver a Cargos y Plantillas
+            </Button>
+
+            <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-700">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    Plantilla Maestra Corporativa
+                  </span>
+                  <span className="text-xs text-slate-400">· Configuración Global</span>
+                </div>
+                <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                  Plantilla Estándar de la Empresa
+                </h1>
+                <p className="mt-1 text-sm text-slate-500 max-w-3xl">
+                  Personaliza los documentos estándar que tu organización solicitará por defecto a todos los candidatos en las nuevas contrataciones.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMasterStandardView(false)}
+                  className="h-9 px-4 text-xs font-medium text-slate-700 hover:bg-slate-100 border-slate-300"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleSaveMasterStandard}
+                  disabled={masterItems.length === 0 || updateMasterStandardMutation.isPending}
+                  className="h-9 px-4 bg-blue-600 text-white hover:bg-blue-700 shadow-sm text-xs font-semibold"
+                >
+                  {updateMasterStandardMutation.isPending ? (
+                    <>
+                      <Clock className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                      Guardar Plantilla Estándar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Global Banner and Sync Control Card */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="md:col-span-2 rounded-xl bg-blue-50/70 border border-blue-200/80 p-4 flex items-start gap-3">
+              <div className="rounded-lg bg-blue-100 p-2 text-blue-700 shrink-0">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-blue-950">
+                  Base oficial para todos los cargos de la empresa
+                </h3>
+                <p className="mt-0.5 text-xs text-blue-800 leading-relaxed">
+                  Esta lista sirve como el modelo central de cumplimiento legal y operativo. Cualquier cargo que tenga asignado el <strong>"Expediente de Ingreso Estándar"</strong> tomará como referencia estos requisitos documentales.
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-white border border-slate-200 shadow-sm p-4 flex flex-col justify-center">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <Label htmlFor="master-sync-toggle" className="text-xs font-bold text-slate-800 cursor-pointer">
+                    Sincronizar cargos activos
+                  </Label>
+                  <p className="mt-0.5 text-[11px] text-slate-500 leading-tight">
+                    Aplica inmediatamente estos cambios a todos los cargos con plantilla estándar.
+                  </p>
+                </div>
+                <Switch
+                  id="master-sync-toggle"
+                  checked={masterApplyToAll}
+                  onCheckedChange={setMasterApplyToAll}
+                  className="shrink-0 mt-0.5"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 2-Column Responsive Workspace */}
+          <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
+            {/* Left Column: Add Document Form & Legal Helper */}
+            <div className="space-y-5">
+              <Card className="border-slate-200 shadow-sm bg-white">
+                <CardHeader className="p-5 pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-md bg-slate-900 p-1.5 text-white">
+                      <Plus className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-sm font-bold text-slate-900">
+                        Añadir Documento
+                      </CardTitle>
+                      <CardDescription className="text-xs text-slate-500">
+                        Agrega un nuevo requisito a la plantilla estándar
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-5 pt-4">
+                  <form onSubmit={handleAddMasterItem} className="space-y-4">
+                    <div>
+                      <Label htmlFor="master-add-title" className="text-xs font-semibold text-slate-700">
+                        Título del Documento *
+                      </Label>
+                      <Input
+                        id="master-add-title"
+                        placeholder="Ej. Certificación Bancaria, Certificado EPS..."
+                        value={newMasterDocTitle}
+                        onChange={(e) => setNewMasterDocTitle(e.target.value)}
+                        className="mt-1.5 text-xs bg-white"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="master-add-desc" className="text-xs font-semibold text-slate-700">
+                        Instrucciones o Descripción (opcional)
+                      </Label>
+                      <Textarea
+                        id="master-add-desc"
+                        placeholder="Ej. Certificación con vigencia no mayor a 30 días en formato PDF..."
+                        value={newMasterDocDesc}
+                        onChange={(e) => setNewMasterDocDesc(e.target.value)}
+                        className="mt-1.5 text-xs resize-none bg-white"
+                        rows={3}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+                      <div>
+                        <Label htmlFor="master-add-req" className="text-xs font-semibold text-slate-800 cursor-pointer">
+                          Documento Obligatorio
+                        </Label>
+                        <p className="text-[11px] text-slate-500">
+                          {newMasterDocRequired
+                            ? "El candidato debe adjuntarlo para avanzar"
+                            : "El candidato puede omitirlo si no aplica"}
+                        </p>
+                      </div>
+                      <Switch
+                        id="master-add-req"
+                        checked={newMasterDocRequired}
+                        onCheckedChange={setNewMasterDocRequired}
+                      />
+                    </div>
+
+                    <Button
+                      type="submit"
+                      disabled={!newMasterDocTitle.trim()}
+                      className="w-full bg-slate-950 hover:bg-slate-800 text-white text-xs font-semibold shadow-sm"
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      Añadir Documento a la Lista
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+
+              {/* Colombian Legal Standards Reference Card */}
+              <Card className="border-slate-200/80 bg-slate-50/60 shadow-xs">
+                <CardHeader className="p-4 pb-2">
+                  <div className="flex items-center gap-2 text-slate-800 font-semibold text-xs">
+                    <Info className="h-4 w-4 text-blue-600" />
+                    <span>Referencia Normativa (Colombia)</span>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-4 pt-1 space-y-2 text-xs text-slate-600 leading-relaxed">
+                  <p className="text-[11px] text-slate-500">
+                    La legislación laboral colombiana suele requerir para el inicio de labores:
+                  </p>
+                  <ul className="list-disc pl-4 space-y-1 text-[11px] text-slate-600">
+                    <li><strong>Cédula de Ciudadanía:</strong> Art. 58 Código Sustantivo del Trabajo.</li>
+                    <li><strong>EPS y Pensión:</strong> Afiliación obligatoria Ley 100 de 1993.</li>
+                    <li><strong>Examen Médico de Ingreso:</strong> Resolución 2346 de 2007 (SST).</li>
+                    <li><strong>Certificaciones Académicas:</strong> Validación de idoneidad.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Right Column: Interactive Document List */}
+            <div className="space-y-4">
+              <Card className="border-slate-200 shadow-sm bg-white overflow-hidden">
+                <CardHeader className="p-5 pb-4 border-b border-slate-100">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <CardTitle className="text-base font-bold text-slate-900">
+                        Documentos en la Plantilla Estándar
+                      </CardTitle>
+                      <CardDescription className="text-xs text-slate-500">
+                        Reordena, edita o elimina los requisitos documentales oficiales.
+                      </CardDescription>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        {masterItems.length} {masterItems.length === 1 ? "documento" : "documentos"}
+                      </span>
+                      <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700 border border-blue-100">
+                        {masterItems.filter((i) => i.required).length} obligatorios
+                      </span>
+                      <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        {masterItems.filter((i) => !i.required).length} opcionales
+                      </span>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="p-0 divide-y divide-slate-100">
+                  {masterItems.length === 0 ? (
+                    <div className="p-12 text-center">
+                      <FileText className="mx-auto h-10 w-10 text-slate-300" />
+                      <h4 className="mt-3 text-sm font-semibold text-slate-700">
+                        No hay documentos en la plantilla estándar
+                      </h4>
+                      <p className="mt-1 text-xs text-slate-500 max-w-sm mx-auto">
+                        Añade documentos utilizando el formulario de la izquierda para configurar los requisitos estándar de la empresa.
+                      </p>
+                    </div>
+                  ) : (
+                    masterItems.map((item, index) => (
+                      <div
+                        key={index}
+                        className="group flex flex-col gap-3 p-4 transition-colors hover:bg-slate-50/80 sm:flex-row sm:items-center sm:gap-4"
+                      >
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-700">
+                            {index + 1}
+                          </span>
+
+                          {/* Reorder Buttons */}
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              type="button"
+                              disabled={index === 0}
+                              onClick={() => handleMoveMasterItem(index, "up")}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-800 disabled:opacity-20 transition"
+                              title="Mover arriba"
+                            >
+                              <ArrowUp className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={index === masterItems.length - 1}
+                              onClick={() => handleMoveMasterItem(index, "down")}
+                              className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-800 disabled:opacity-20 transition"
+                              title="Mover abajo"
+                            >
+                              <ArrowDown className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Title and Description */}
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-semibold text-slate-900 leading-snug">
+                            {item.title}
+                          </h4>
+                          {item.description ? (
+                            <p className="mt-0.5 text-xs text-slate-500 leading-relaxed">
+                              {item.description}
+                            </p>
+                          ) : (
+                            <p className="mt-0.5 text-xs italic text-slate-400">
+                              Sin instrucciones adicionales
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Action Badges and Buttons */}
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleToggleMasterItemRequired(index)}
+                            title="Haz clic para alternar entre obligatorio y opcional"
+                            className={`h-7 px-2.5 text-xs font-medium rounded-full transition ${
+                              item.required
+                                ? "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200"
+                            }`}
+                          >
+                            {item.required ? "Obligatorio" : "Opcional"}
+                          </Button>
+
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleOpenEditMasterDoc(index)}
+                            className="h-8 px-2.5 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-md"
+                            title="Editar título e instrucciones"
+                          >
+                            <Pencil className="mr-1 h-3.5 w-3.5 text-slate-500" />
+                            Editar
+                          </Button>
+
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleRemoveMasterItem(index)}
+                            className="h-8 w-8 text-slate-400 hover:bg-red-50 hover:text-red-600 rounded-md transition"
+                            title="Eliminar de la plantilla estándar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Bottom Action Footer Bar */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="text-xs text-slate-500 text-center sm:text-left">
+                  Tienes <strong className="text-slate-800">{masterItems.length} requisitos</strong> configurados en la plantilla estándar oficial.
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsMasterStandardView(false)}
+                    className="text-xs"
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSaveMasterStandard}
+                    disabled={masterItems.length === 0 || updateMasterStandardMutation.isPending}
+                    className="bg-blue-600 text-white hover:bg-blue-700 text-xs font-semibold shadow-sm"
+                  >
+                    {updateMasterStandardMutation.isPending ? (
+                      <>
+                        <Clock className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        Guardando Cambios...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                        Guardar Plantilla Estándar
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* DIALOG: Editar Documento de la Plantilla Estándar */}
+          <Dialog open={isEditMasterDocDialogOpen} onOpenChange={setIsEditMasterDocDialogOpen}>
+            <DialogContent className="sm:max-w-lg">
+              <form onSubmit={handleSaveMasterDocEdit}>
+                <DialogHeader>
+                  <DialogTitle className="text-lg font-bold">
+                    Editar Documento Estándar
+                  </DialogTitle>
+                  <DialogDescription className="text-xs text-slate-500">
+                    Modifica el título, las instrucciones y la obligatoriedad de este documento de la plantilla maestra.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label htmlFor="edit-master-title" className="text-xs font-semibold">
+                      Título del documento *
+                    </Label>
+                    <Input
+                      id="edit-master-title"
+                      value={editingMasterDocTitle}
+                      onChange={(e) => setEditingMasterDocTitle(e.target.value)}
+                      placeholder="Ej. Certificado de Afiliación EPS"
+                      className="mt-1.5 text-xs"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="edit-master-desc" className="text-xs font-semibold">
+                      Instrucciones o descripción (opcional)
+                    </Label>
+                    <Textarea
+                      id="edit-master-desc"
+                      value={editingMasterDocDesc}
+                      onChange={(e) => setEditingMasterDocDesc(e.target.value)}
+                      placeholder="Instrucciones para el candidato sobre vigencia, formato o emisor..."
+                      className="mt-1.5 resize-none text-xs"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                    <div>
+                      <Label htmlFor="edit-master-req" className="text-xs font-semibold cursor-pointer">
+                        Documento Obligatorio
+                      </Label>
+                      <p className="text-[11px] text-slate-500">
+                        {editingMasterDocRequired
+                          ? "El candidato debe subirlo obligatoriamente."
+                          : "El candidato puede omitirlo en su proceso."}
+                      </p>
+                    </div>
+                    <Switch
+                      id="edit-master-req"
+                      checked={editingMasterDocRequired}
+                      onCheckedChange={setEditingMasterDocRequired}
+                    />
+                  </div>
+                </div>
+
+                <DialogFooter className="gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsEditMasterDocDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={!editingMasterDocTitle.trim()}
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Actualizar Documento
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout roleOverride="HR">
@@ -599,7 +1121,7 @@ export default function PositionsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setIsEditMasterStandardOpen(true)}
+              onClick={handleEnterMasterStandardView}
               className="border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100 hover:text-blue-800"
             >
               <Sliders className="mr-1.5 h-4 w-4 text-blue-600" />
@@ -1084,180 +1606,6 @@ export default function PositionsPage() {
           </div>
         </div>
       </div>
-
-      {/* DIALOG: Editar Plantilla Estándar Maestra de la Empresa */}
-      <Dialog open={isEditMasterStandardOpen} onOpenChange={setIsEditMasterStandardOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <div className="flex items-center gap-2">
-              <Sliders className="h-5 w-5 text-blue-600" />
-              <DialogTitle className="text-lg font-bold">
-                Editar Plantilla Estándar de la Empresa
-              </DialogTitle>
-            </div>
-            <DialogDescription className="text-xs text-slate-500">
-              Personaliza los documentos estándar que tu organización solicitará por defecto en las contrataciones.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Quick action: Reset to legal defaults */}
-            <div className="flex items-center justify-between rounded-lg bg-blue-50/60 p-3 border border-blue-100">
-              <div className="flex items-center gap-2 text-xs text-blue-900">
-                <ShieldCheck className="h-4 w-4 text-blue-600" />
-                <span>Esta plantilla sirve como base oficial para todos los cargos de la empresa.</span>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleResetMasterToLegalDefaults}
-                className="h-7 text-xs border-blue-200 text-blue-700 hover:bg-blue-100"
-              >
-                <RotateCcw className="mr-1 h-3 w-3" />
-                Restaurar 6 normativos
-              </Button>
-            </div>
-
-            {/* List of master documents */}
-            <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
-              {masterItems.map((item, index) => (
-                <div key={index} className="flex items-center gap-2.5 p-3 hover:bg-slate-50/70">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600">
-                    {index + 1}
-                  </span>
-
-                  <div className="flex flex-col gap-0.5">
-                    <button
-                      type="button"
-                      disabled={index === 0}
-                      onClick={() => handleMoveMasterItem(index, "up")}
-                      className="text-slate-400 hover:text-slate-800 disabled:opacity-20"
-                    >
-                      <ArrowUp className="h-2.5 w-2.5" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={index === masterItems.length - 1}
-                      onClick={() => handleMoveMasterItem(index, "down")}
-                      className="text-slate-400 hover:text-slate-800 disabled:opacity-20"
-                    >
-                      <ArrowDown className="h-2.5 w-2.5" />
-                    </button>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-slate-900">{item.title}</p>
-                    {item.description && (
-                      <p className="text-[11px] text-slate-500 line-clamp-1">{item.description}</p>
-                    )}
-                  </div>
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleToggleMasterItemRequired(index)}
-                    className={`h-6 px-2 text-[11px] font-medium rounded-full ${
-                      item.required
-                        ? "bg-blue-50 text-blue-700 hover:bg-blue-100"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {item.required ? "Obligatorio" : "Opcional"}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleRemoveMasterItem(index)}
-                    className="h-7 w-7 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-
-            {/* Add new document to master standard */}
-            <form onSubmit={handleAddMasterItem} className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-xs font-semibold text-slate-700 mb-2">
-                + Añadir documento a la plantilla estándar:
-              </p>
-              <div className="grid gap-2 sm:grid-cols-[1.5fr_1.5fr_auto_auto]">
-                <Input
-                  placeholder="Título (ej. Certificación Bancaria)"
-                  value={newMasterDocTitle}
-                  onChange={(e) => setNewMasterDocTitle(e.target.value)}
-                  className="bg-white text-xs h-8"
-                />
-                <Input
-                  placeholder="Descripción / Instrucciones (opcional)"
-                  value={newMasterDocDesc}
-                  onChange={(e) => setNewMasterDocDesc(e.target.value)}
-                  className="bg-white text-xs h-8"
-                />
-                <div className="flex items-center gap-2 bg-white px-2.5 py-1 rounded-md border border-slate-200">
-                  <Switch
-                    id="master-req"
-                    checked={newMasterDocRequired}
-                    onCheckedChange={setNewMasterDocRequired}
-                  />
-                  <Label htmlFor="master-req" className="text-xs cursor-pointer">
-                    {newMasterDocRequired ? "Obligatorio" : "Opcional"}
-                  </Label>
-                </div>
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={!newMasterDocTitle.trim()}
-                  className="h-8 bg-slate-900 text-white"
-                >
-                  <Plus className="mr-1 h-3 w-3" />
-                  Añadir
-                </Button>
-              </div>
-            </form>
-
-            {/* Sync option */}
-            <div className="flex items-start gap-2.5 rounded-lg border border-slate-200 p-3 bg-white">
-              <Switch
-                id="apply-all"
-                checked={masterApplyToAll}
-                onCheckedChange={setMasterApplyToAll}
-                className="mt-0.5"
-              />
-              <div>
-                <Label htmlFor="apply-all" className="text-xs font-semibold cursor-pointer">
-                  Actualizar y sincronizar todos los cargos que usan la plantilla estándar
-                </Label>
-                <p className="text-[11px] text-slate-500">
-                  Si se activa, todos los cargos configurados con el "Expediente de Ingreso Estándar" adoptarán inmediatamente estos documentos.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setIsEditMasterStandardOpen(false)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSaveMasterStandard}
-              disabled={masterItems.length === 0 || updateMasterStandardMutation.isPending}
-              className="bg-blue-600 text-white hover:bg-blue-700"
-            >
-              {updateMasterStandardMutation.isPending ? "Guardando..." : "Guardar Plantilla Estándar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* DIALOG: Editar Documento Individual */}
       <Dialog open={isEditDocOpen} onOpenChange={setIsEditDocOpen}>
