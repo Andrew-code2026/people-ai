@@ -6,15 +6,26 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
 import { Plus, UserRound, FileText, ArrowUpRight } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export default function HiringPage() {
   const companyId = 4; const utils = trpc.useUtils();
   const positions = trpc.positions.list.useQuery({ companyId }); const templates = trpc.templates.list.useQuery({ companyId }); const hiring = trpc.hiring.list.useQuery({ companyId });
-  const [positionId, setPositionId] = useState("1"); const [statusFilter, setStatusFilter] = useState("all"); const [positionFilter, setPositionFilter] = useState("all");
-  const selectedTemplate = templates.data?.find(t => t.positionId === Number(positionId)); const template = trpc.templates.get.useQuery({ companyId, templateId: selectedTemplate?.id || 1 }, { enabled: Boolean(selectedTemplate?.id) });
+  const [positionId, setPositionId] = useState<string>(""); const [statusFilter, setStatusFilter] = useState("all"); const [positionFilter, setPositionFilter] = useState("all");
+  
+  useEffect(() => {
+    if (positions.data && positions.data.length > 0) {
+      if (!positionId || !positions.data.some(p => String(p.id) === positionId)) {
+        setPositionId(String(positions.data[0].id));
+      }
+    }
+  }, [positions.data, positionId]);
+
+  const currentPosition = positions.data?.find(p => p.id === Number(positionId));
+  const selectedTemplate = templates.data?.find(t => t.id === currentPosition?.templateId) || templates.data?.find(t => t.positionId === Number(positionId)) || templates.data?.[0];
+  const template = trpc.templates.get.useQuery({ companyId, templateId: selectedTemplate?.id || 1 }, { enabled: Boolean(selectedTemplate?.id) });
   const [fullName, setFullName] = useState(""); const [identificationNumber, setIdentificationNumber] = useState(""); const [email, setEmail] = useState("");
   const create = trpc.hiring.create.useMutation({ onSuccess: () => { utils.hiring.list.invalidate(); toast.success("Contratación creada con snapshot de documentos"); setFullName(""); setIdentificationNumber(""); setEmail(""); } });
   const rows = hiring.data?.filter(row => (statusFilter === "all" || row.status === statusFilter) && (positionFilter === "all" || String(row.positionId) === positionFilter)) || [];

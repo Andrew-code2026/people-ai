@@ -1,9 +1,57 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { appProfiles, companies, departments, employees, knowledgeBaseDocuments, recruitmentCandidates, type InsertUser, users } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _migrated = false;
+
+async function ensureSchema(db: ReturnType<typeof drizzle>) {
+  if (_migrated) return;
+  _migrated = true;
+  try {
+    try {
+      await db.execute(sql`ALTER TABLE \`job_positions\` ADD COLUMN \`templateId\` INT NULL;`);
+    } catch {
+      // Column might already exist
+    }
+
+    try {
+      await db.execute(sql`ALTER TABLE \`document_templates\` MODIFY COLUMN \`positionId\` INT NULL;`);
+    } catch {
+      // positionId modify
+    }
+
+    try {
+      await db.execute(sql`
+        UPDATE \`job_positions\` jp
+        JOIN \`document_templates\` dt ON dt.positionId = jp.id AND dt.companyId = jp.companyId AND dt.status = 'active'
+        SET jp.templateId = dt.id
+        WHERE jp.templateId IS NULL;
+      `);
+    } catch {
+      // ignore
+    }
+
+    try {
+      // Consolidate duplicate active standard templates per company
+      await db.execute(sql`
+        UPDATE \`document_templates\` d1
+        JOIN \`document_templates\` d2 ON d1.companyId = d2.companyId
+          AND d1.name = d2.name
+          AND d1.name = 'Expediente de Ingreso Estándar'
+          AND d1.status = 'active'
+          AND d2.status = 'active'
+          AND d1.id > d2.id
+        SET d1.status = 'archived';
+      `);
+    } catch {
+      // ignore
+    }
+  } catch (error) {
+    console.warn("[Database] Schema sync notice:", error);
+  }
+}
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -17,6 +65,7 @@ export async function getDb() {
           },
         },
       });
+      await ensureSchema(_db);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
