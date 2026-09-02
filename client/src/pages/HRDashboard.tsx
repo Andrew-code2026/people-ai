@@ -9,6 +9,7 @@ import { BookOpen, Bot, FileText, Plus, UserPlus, Users, Settings2, MessageCircl
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
+import { getHiringStatusInfo } from "@/lib/statusFormatters";
 
 export default function HRDashboard() {
   const { user } = useAuth();
@@ -216,19 +217,17 @@ export default function HRDashboard() {
                     <span className="text-slate-500">
                       {candidate.receivedCount}/{candidate.requiredCount}
                     </span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "w-fit font-normal",
-                        candidate.status === "complete" || (candidate.requiredCount > 0 && candidate.receivedCount >= candidate.requiredCount)
-                          ? "border-teal-200 bg-teal-50 text-teal-700"
-                          : candidate.status === "in_review"
-                          ? "border-blue-200 bg-blue-50 text-blue-700"
-                          : "border-amber-200 bg-amber-50 text-amber-700"
-                      )}
-                    >
-                      {candidate.status === "complete" ? "Completo" : candidate.status === "in_review" ? "En revisión" : "Pendiente"}
-                    </Badge>
+                    {(() => {
+                      const statusInfo = getHiringStatusInfo(candidate.status, candidate.requiredCount, candidate.receivedCount);
+                      return (
+                        <Badge
+                          variant="outline"
+                          className={cn("w-fit font-normal", statusInfo.className)}
+                        >
+                          {statusInfo.label}
+                        </Badge>
+                      );
+                    })()}
                     <ArrowUpRight className="hidden h-4 w-4 text-slate-400 sm:block" />
                   </div>
                 ))

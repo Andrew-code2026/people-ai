@@ -4,42 +4,819 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRoute } from "wouter";
-import { ArrowLeft, CheckCircle2, Copy, Link2, FileText, ExternalLink, Mail, Bell, ShieldOff, Clock3, BrainCircuit, AlertTriangle, Check, RefreshCcw } from "lucide-react";
+import {
+  ArrowLeft,
+  CheckCircle2,
+  Copy,
+  Link2,
+  FileText,
+  ExternalLink,
+  Mail,
+  Bell,
+  ShieldOff,
+  Clock3,
+  BrainCircuit,
+  AlertTriangle,
+  Check,
+  RefreshCcw,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import {
+  getHiringStatusInfo,
+  getLinkStatusInfo,
+  getCommunicationStatusInfo,
+} from "@/lib/statusFormatters";
 
-const dateLabel = (value: Date | string | null | undefined) => value ? new Date(value).toLocaleString("es-CO", { dateStyle: "medium", timeStyle: "short" }) : "—";
+const dateLabel = (value: Date | string | null | undefined) =>
+  value
+    ? new Date(value).toLocaleString("es-CO", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "—";
 
 function ContextualAssistant({ companyId, processId }: { companyId: number; processId: number }) {
-  const [messages, setMessages] = useState<Message[]>([{ role: "assistant", content: "Estoy limitado a este expediente. Puedo resumir sus pendientes y hallazgos, pero no tomaré decisiones ni modificaré datos." }]);
-  const ask = trpc.ai.ask.useMutation({ onSuccess: result => { setMessages(prev => [...prev, { role: "assistant", content: result.content }]); }, onError: error => toast.error(error.message) });
-  return <Card className="border-violet-100"><CardHeader><CardTitle className="flex items-center gap-2 text-base"><BrainCircuit className="h-4 w-4 text-violet-600" />People AI · contexto de esta contratación</CardTitle><p className="text-xs text-slate-500">La consulta se limita al proceso seleccionado y queda auditada.</p></CardHeader><CardContent className="p-0"><AIChatBox messages={messages} onSendMessage={(content: string) => { setMessages(prev => [...prev, { role: "user", content }]); ask.mutate({ companyId, processId, question: content, mode: "demo" }); }} isLoading={ask.isPending} height="360px" placeholder="Pregunta por pendientes o revisión…" suggestedPrompts={["¿Qué documentos están pendientes?", "Resume el estado de este expediente"]} /></CardContent></Card>;
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      content:
+        "Estoy limitado a este expediente. Puedo resumir sus pendientes y hallazgos, pero no tomaré decisiones ni modificaré datos.",
+    },
+  ]);
+  const ask = trpc.ai.ask.useMutation({
+    onSuccess: (result) => {
+      setMessages((prev) => [...prev, { role: "assistant", content: result.content }]);
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  return (
+    <Card className="border-violet-100">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BrainCircuit className="h-4 w-4 text-violet-600" />
+          People AI · contexto de esta contratación
+        </CardTitle>
+        <p className="text-xs text-slate-500">
+          La consulta se limita al proceso seleccionado y queda auditada.
+        </p>
+      </CardHeader>
+      <CardContent className="p-0">
+        <AIChatBox
+          messages={messages}
+          onSendMessage={(content: string) => {
+            setMessages((prev) => [...prev, { role: "user", content }]);
+            ask.mutate({ companyId, processId, question: content, mode: "demo" });
+          }}
+          isLoading={ask.isPending}
+          height="360px"
+          placeholder="Pregunta por pendientes o revisión…"
+          suggestedPrompts={[
+            "¿Qué documentos están pendientes?",
+            "Resume el estado de este expediente",
+          ]}
+        />
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function HiringDetailPage() {
-  const [, params] = useRoute("/hr/contrataciones/:id"); const processId = Number(params?.id || 0); const companyId = 4;   const [link, setLink] = useState(""); const [activeDoc, setActiveDoc] = useState(0); const [composeOpen, setComposeOpen] = useState(false); const [editingFinding, setEditingFinding] = useState<number | null>(null); const [editedType, setEditedType] = useState(""); const [editedRequirement, setEditedRequirement] = useState(""); const [preparedEmail, setPreparedEmail] = useState<{ mailtoUrl: string; subject: string; text: string; type: "initial" | "reminder" } | null>(null);
-  const detail = trpc.hiring.detail.useQuery({ companyId, processId }, { enabled: processId > 0 });
-  const documentUrl = trpc.hiring.documentUrl.useQuery({ companyId, processId, documentId: activeDoc }, { enabled: activeDoc > 0 });
-  const linkState = trpc.hiring.linkState.useQuery({ companyId, processId }, { enabled: processId > 0 });
-  const downloadZip = trpc.hiring.downloadZip.useMutation({ onSuccess: data => { const bytes = Uint8Array.from(atob(data.base64), char => char.charCodeAt(0)); const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = data.filename; anchor.click(); URL.revokeObjectURL(url); toast.success("Expediente descargado"); }, onError: error => toast.error(error.message) });
-  const communications = trpc.hiring.communications.useQuery({ companyId, processId }, { enabled: processId > 0 });
-  const activities = trpc.hiring.activities.useQuery({ companyId, processId }, { enabled: processId > 0 });
+  const [, params] = useRoute("/hr/contrataciones/:id");
+  const processId = Number(params?.id || 0);
+  const companyId = 4;
+  const [link, setLink] = useState("");
+  const [activeDoc, setActiveDoc] = useState(0);
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [editingFinding, setEditingFinding] = useState<number | null>(null);
+  const [editedType, setEditedType] = useState("");
+  const [editedRequirement, setEditedRequirement] = useState("");
+  const [preparedEmail, setPreparedEmail] = useState<{
+    mailtoUrl: string;
+    subject: string;
+    text: string;
+    type: "initial" | "reminder";
+  } | null>(null);
+
+  const detail = trpc.hiring.detail.useQuery(
+    { companyId, processId },
+    { enabled: processId > 0 }
+  );
+  const documentUrl = trpc.hiring.documentUrl.useQuery(
+    { companyId, processId, documentId: activeDoc },
+    { enabled: activeDoc > 0 }
+  );
+  const linkState = trpc.hiring.linkState.useQuery(
+    { companyId, processId },
+    { enabled: processId > 0 }
+  );
+  const downloadZip = trpc.hiring.downloadZip.useMutation({
+    onSuccess: (data) => {
+      const bytes = Uint8Array.from(atob(data.base64), (char) => char.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = data.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success("Expediente descargado");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const communications = trpc.hiring.communications.useQuery(
+    { companyId, processId },
+    { enabled: processId > 0 }
+  );
+  const activities = trpc.hiring.activities.useQuery(
+    { companyId, processId },
+    { enabled: processId > 0 }
+  );
   const utils = trpc.useUtils();
-  const generate = trpc.hiring.generateLink.useMutation({ onSuccess: data => { const url = `${window.location.origin}/candidate/documents/${data.token}`; setLink(url); utils.hiring.linkState.invalidate({ companyId, processId }); toast.success("Enlace seguro generado"); } });
-  const prepareEmail = trpc.hiring.prepareEmail.useMutation({ onSuccess: data => { setPreparedEmail(data); setComposeOpen(false); window.location.href = data.mailtoUrl; toast.info("Borrador abierto en tu cliente de correo. Envíalo manualmente y luego regístralo en PEOPLE AI."); }, onError: error => toast.error(error.message) });
-  const prepareReminder = trpc.hiring.prepareReminder.useMutation({ onSuccess: data => { setPreparedEmail(data); window.location.href = data.mailtoUrl; toast.info("Recordatorio preparado en tu cliente de correo. Envíalo manualmente y luego regístralo en PEOPLE AI."); }, onError: error => toast.error(error.message) });
-  const markSent = trpc.hiring.markCommunicationSent.useMutation({ onSuccess: () => { setPreparedEmail(null); utils.hiring.communications.invalidate({ companyId, processId }); utils.hiring.activities.invalidate({ companyId, processId }); utils.hiring.linkState.invalidate({ companyId, processId }); toast.success("Envío registrado manualmente"); }, onError: error => toast.error(error.message) });
-  const revoke = trpc.hiring.revokeLink.useMutation({ onSuccess: () => { utils.hiring.linkState.invalidate({ companyId, processId }); toast.success("Enlace revocado"); }, onError: error => toast.error(error.message) });
-  const review = trpc.hiring.updateRequirement.useMutation({ onSuccess: () => { utils.hiring.detail.invalidate({ companyId, processId }); toast.success("Estado de revisión actualizado"); } });
-  const aiFindings = trpc.ai.findings.useQuery({ companyId, processId }, { enabled: processId > 0 });
-  const aiSummary = trpc.ai.summary.useQuery({ companyId, processId, mode: "demo" }, { enabled: processId > 0 });
-  const analyzeAi = trpc.ai.analyzeDocuments.useMutation({ onSuccess: () => { utils.ai.findings.invalidate({ companyId, processId }); utils.ai.runs.invalidate({ companyId, processId }); utils.ai.summary.invalidate({ companyId, processId }); toast.success("Análisis DEMO completado; los hallazgos requieren revisión humana"); }, onError: error => toast.error(error.message) });
-  const reviewAi = trpc.ai.reviewFinding.useMutation({ onSuccess: () => { utils.ai.findings.invalidate({ companyId, processId }); utils.ai.insights.invalidate({ companyId }); toast.success("Corrección de IA registrada"); }, onError: error => toast.error(error.message) });
-  useEffect(() => { if (documentUrl.data) { window.open(documentUrl.data, "_blank", "noopener,noreferrer"); setActiveDoc(0); } }, [documentUrl.data]);
-  if (detail.isLoading) return <DashboardLayout roleOverride="HR"><div className="p-8 text-sm text-slate-500">Cargando expediente…</div></DashboardLayout>;
-  if (!detail.data) return <DashboardLayout roleOverride="HR"><div className="p-8 text-sm text-rose-600">Contratación no encontrada para este tenant.</div></DashboardLayout>;
-  const { process, candidate, position, company, requirements, documents } = detail.data; const received = requirements.filter(r => ["uploaded", "replaced", "verified"].includes(r.status)).length; const pending = requirements.length - received; const activeLink = linkState.data && linkState.data.status === "active"; const sent = communications.data?.some(item => item.status === "sent") || false; const submitted = process.status === "in_review" || process.status === "complete";
-  return <DashboardLayout roleOverride="HR"><div className="mx-auto max-w-6xl space-y-6"><button onClick={() => history.back()} className="flex items-center text-sm text-slate-500 hover:text-slate-900"><ArrowLeft className="mr-2 h-4 w-4" />Volver a contrataciones</button><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Expediente digital</p><h1 className="mt-2 text-3xl font-semibold">{candidate?.fullName}</h1><p className="mt-2 text-sm text-slate-500">{position?.name} · {company?.name}</p></div><Badge variant="outline">{process.status === "in_review" ? "En revisión" : process.status}</Badge></div><div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]"><Card><CardHeader><CardTitle className="text-base">Documentos requeridos</CardTitle><p className="text-sm text-slate-500">{received}/{requirements.length} documentos recibidos · {pending} pendientes</p></CardHeader><CardContent className="space-y-3"><div className="rounded-xl border border-violet-100 bg-violet-50 p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="flex items-center gap-2 text-sm font-semibold text-violet-950"><BrainCircuit className="h-4 w-4 text-violet-600" />AI Document Intelligence</p><p className="mt-1 text-xs text-violet-800">Analiza metadatos de documentos, propone asociaciones y nunca reemplaza la revisión humana.</p></div><Button size="sm" onClick={() => analyzeAi.mutate({ companyId, processId, mode: "demo" })} disabled={analyzeAi.isPending || documents.length === 0} className="bg-violet-700 text-white hover:bg-violet-800"><RefreshCcw className={`mr-1 h-3.5 w-3.5 ${analyzeAi.isPending ? "animate-spin" : ""}`} />{analyzeAi.isPending ? "Analizando…" : "Analizar con IA"}</Button></div>{aiSummary.data && <p className="mt-3 rounded-lg bg-white/70 p-3 text-xs leading-5 text-violet-950">{aiSummary.data.summary}</p>}{aiFindings.data?.length ? <div className="mt-3 space-y-2">{aiFindings.data.slice(0, 6).map(finding => <div key={finding.id} className="rounded-lg bg-white p-3 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium text-slate-900">{finding.detectedType}</span><Badge variant={finding.status === "review_required" ? "destructive" : "outline"}>{finding.confidence}% · {finding.status === "review_required" ? "Revisión" : "Identificado"}</Badge></div>{finding.issueMessage && <p className="mt-1 flex items-start gap-1 text-amber-700"><AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />{finding.issueMessage}</p>}<p className="mt-1 text-slate-500">Nombre sugerido: {finding.suggestedName || "No disponible"}</p>{finding.status === "review_required" && <div className="mt-2 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => reviewAi.mutate({ companyId, findingId: finding.id, status: "confirmed" })}><Check className="mr-1 h-3.5 w-3.5" />Confirmar</Button><Button size="sm" variant="ghost" onClick={() => setEditingFinding(finding.id)}>Corregir</Button><Button size="sm" variant="ghost" onClick={() => reviewAi.mutate({ companyId, findingId: finding.id, status: "rejected" })}>Descartar</Button>{editingFinding === finding.id && <div className="mt-2 grid gap-2 rounded-lg border border-violet-100 bg-violet-50 p-3 sm:grid-cols-2"><label className="text-[11px] font-medium text-slate-600">Tipo corregido<input value={editedType || finding.detectedType} onChange={event => setEditedType(event.target.value)} className="mt-1 w-full rounded border px-2 py-1 text-xs" /></label><label className="text-[11px] font-medium text-slate-600">Requirement ID opcional<Input value={editedRequirement || String(finding.requirementId || "")} onChange={event => setEditedRequirement(event.target.value)} className="mt-1 h-7 text-xs" /></label><div className="flex gap-2 sm:col-span-2"><Button size="sm" onClick={() => { const requirementId = Number(editedRequirement); reviewAi.mutate({ companyId, findingId: finding.id, status: "corrected", detectedType: editedType || finding.detectedType, ...(requirementId > 0 ? { requirementId } : {}) }); setEditingFinding(null); setEditedType(""); setEditedRequirement(""); }}>Guardar corrección</Button><Button size="sm" variant="ghost" onClick={() => setEditingFinding(null)}>Cancelar</Button></div></div>}</div>}</div>)}</div> : <p className="mt-3 text-xs text-violet-700">Ejecuta el análisis para generar hallazgos de esta contratación.</p>}</div>{requirements.map(req => { const doc = documents.find(d => d.requirementId === req.id); return <div key={req.id} className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"><FileText className="h-4 w-4 text-blue-600" /><div className="flex-1"><p className="text-sm font-medium">{req.title}</p><p className="text-xs text-slate-500">{doc ? `${doc.normalizedName} · ${Math.round(doc.sizeBytes / 1024)} KB` : req.required ? "Pendiente · obligatorio" : "Pendiente · opcional"}</p></div>{doc ? <div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setActiveDoc(doc.id)}><ExternalLink className="mr-1 h-3.5 w-3.5" />Abrir</Button><Button size="sm" variant={req.status === "verified" ? "default" : "ghost"} onClick={() => review.mutate({ companyId, processId, requirementId: req.id, status: req.status === "verified" ? "uploaded" : "verified" })}>{req.status === "verified" ? "Verificado" : "Marcar verificado"}</Button></div> : <Badge variant="outline">Pendiente</Badge>}</div>; })}</CardContent></Card><div className="space-y-6"><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Link2 className="h-4 w-4" />Enlace del candidato</CardTitle></CardHeader><CardContent className="space-y-3"><div className="flex items-center justify-between text-sm"><span className="text-slate-500">Estado</span><Badge variant={activeLink ? "default" : "outline"}>{activeLink ? "Activo" : linkState.data?.status || "No generado"}</Badge></div>{linkState.data && <><p className="text-xs text-slate-500">Creado {dateLabel(linkState.data.createdAt)} · Expira {dateLabel(linkState.data.expiresAt)}</p><div className="space-y-2 rounded-lg bg-slate-50 p-3 text-xs"><p className={linkState.data.status !== "expired" && linkState.data.status !== "revoked" ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Enlace generado</p><p className={sent ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Enlace enviado</p><p className={linkState.data.lastUsedAt ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Enlace abierto {linkState.data.lastUsedAt ? `· ${dateLabel(linkState.data.lastUsedAt)}` : ""}</p><p className={received > 0 ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Documentos cargados · {received}/{requirements.length}</p><p className={pending === 0 ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Documentación completa</p><p className={submitted ? "text-slate-700" : "text-slate-400"}><CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />Documentación enviada</p></div></>}<div className="flex flex-wrap gap-2"><Button disabled={generate.isPending} onClick={() => generate.mutate({ companyId, processId })} className="bg-slate-950 text-white">{activeLink ? "Regenerar enlace" : "Generar enlace"}</Button>{link && <Button variant="outline" onClick={() => window.open(link, "_blank", "noopener,noreferrer")}>Abrir portal</Button>}{activeLink && <Button variant="outline" onClick={() => revoke.mutate({ companyId, processId })}><ShieldOff className="mr-1 h-4 w-4" />Revocar</Button>}</div>{link && <div className="flex gap-2"><input readOnly value={link} className="min-w-0 flex-1 rounded-lg border bg-slate-50 px-3 text-xs" /><Button size="icon" variant="outline" onClick={() => navigator.clipboard.writeText(link).then(() => toast.success("Enlace copiado"))}><Copy className="h-4 w-4" /></Button></div>}</CardContent></Card><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Mail className="h-4 w-4" />Comunicación</CardTitle></CardHeader><CardContent className="space-y-3"><p className="text-sm text-slate-600">{candidate?.email}</p><p className="text-xs text-slate-500">PEOPLE AI prepara un borrador y abre tu cliente de correo. El envío lo realizas tú.</p><div className="flex flex-wrap gap-2"><Button disabled={prepareEmail.isPending || !activeLink} onClick={() => setComposeOpen(true)}><Mail className="mr-1 h-4 w-4" />Enviar documentación</Button><Button variant="outline" disabled={prepareReminder.isPending || !activeLink || pending === 0 || !link} onClick={() => prepareReminder.mutate({ companyId, processId, portalUrl: link })}><Bell className="mr-1 h-4 w-4" />Enviar recordatorio</Button></div>{preparedEmail && <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900"><p className="font-medium">Borrador preparado para {preparedEmail.type === "reminder" ? "recordatorio" : "documentación"}.</p><p className="mt-1">Después de revisarlo y enviarlo desde tu cliente, registra la acción aquí.</p><Button size="sm" className="mt-2" onClick={() => markSent.mutate({ companyId, processId, type: preparedEmail.type, portalUrl: link })} disabled={markSent.isPending || !link}>Marcar como enviado</Button></div>}{communications.data?.length ? <div className="space-y-2 border-t pt-3">{communications.data.slice(0, 3).map(item => <div key={item.id} className="flex items-center justify-between text-xs"><span>{item.type === "reminder" ? "Recordatorio" : "Documentación"}</span><Badge variant={item.status === "sent" ? "default" : "destructive"}>{item.status === "sent" ? "Enviado" : item.status === "error" ? "Error" : item.status}</Badge></div>)}</div> : <p className="text-xs text-slate-500">Aún no hay comunicaciones registradas.</p>}<Button variant="outline" disabled={downloadZip.isPending || documents.length === 0} onClick={() => downloadZip.mutate({ companyId, processId })}>Descargar expediente ZIP</Button></CardContent></Card></div></div><ContextualAssistant companyId={companyId} processId={processId} /><Card><CardHeader><CardTitle className="flex items-center gap-2 text-base"><Clock3 className="h-4 w-4" />Actividad reciente</CardTitle></CardHeader><CardContent>{activities.isLoading ? <p className="text-sm text-slate-500">Cargando actividad…</p> : activities.data?.length ? <div className="grid gap-2 md:grid-cols-2">{activities.data.slice(0, 8).map(item => <div key={item.id} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"><span className="font-medium">{item.type}</span><span className="ml-2 text-slate-400">{dateLabel(item.createdAt)}</span></div>)}</div> : <p className="text-sm text-slate-500">Sin actividad registrada.</p>}</CardContent></Card></div>{composeOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" role="dialog" aria-modal="true" aria-labelledby="send-documentation-title"><div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-wider text-blue-600">Comunicación</p><h2 id="send-documentation-title" className="mt-1 text-xl font-semibold text-slate-950">Enviar documentación</h2></div><button onClick={() => setComposeOpen(false)} className="text-sm text-slate-500 hover:text-slate-900">Cerrar</button></div><div className="mt-5 space-y-4 text-sm"><div><p className="text-xs font-medium uppercase tracking-wider text-slate-400">Candidato</p><p className="mt-1 font-medium text-slate-900">{candidate?.fullName}</p><p className="text-slate-500">{candidate?.email}</p></div><div><p className="text-xs font-medium uppercase tracking-wider text-slate-400">Asunto</p><p className="mt-1 rounded-lg bg-slate-50 p-3 text-slate-700">Documentación requerida para tu proceso de contratación</p></div><div><p className="text-xs font-medium uppercase tracking-wider text-slate-400">Mensaje</p><p className="mt-1 rounded-lg bg-slate-50 p-3 leading-6 text-slate-600">Hola {candidate?.fullName},<br /><br />Nos encontramos adelantando tu proceso de contratación para el cargo de {position?.name}.<br /><br />Completa cada documento desde el enlace seguro.<br /><br />Gracias,<br />Equipo de Talento Humano.</p></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setComposeOpen(false)}>Cancelar</Button><Button disabled={prepareEmail.isPending || !link} onClick={() => prepareEmail.mutate({ companyId, processId, portalUrl: link })}><Mail className="mr-2 h-4 w-4" />Abrir cliente de correo</Button></div></div></div></div>}</DashboardLayout>;
+  const generate = trpc.hiring.generateLink.useMutation({
+    onSuccess: (data) => {
+      const url = `${window.location.origin}/candidate/documents/${data.token}`;
+      setLink(url);
+      utils.hiring.linkState.invalidate({ companyId, processId });
+      toast.success("Enlace seguro generado");
+    },
+  });
+  const prepareEmail = trpc.hiring.prepareEmail.useMutation({
+    onSuccess: (data) => {
+      setPreparedEmail(data);
+      setComposeOpen(false);
+      window.location.href = data.mailtoUrl;
+      toast.info(
+        "Borrador abierto en tu cliente de correo. Envíalo manualmente y luego regístralo en PEOPLE AI."
+      );
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const prepareReminder = trpc.hiring.prepareReminder.useMutation({
+    onSuccess: (data) => {
+      setPreparedEmail(data);
+      window.location.href = data.mailtoUrl;
+      toast.info(
+        "Recordatorio preparado en tu cliente de correo. Envíalo manualmente y luego regístralo en PEOPLE AI."
+      );
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const markSent = trpc.hiring.markCommunicationSent.useMutation({
+    onSuccess: () => {
+      setPreparedEmail(null);
+      utils.hiring.communications.invalidate({ companyId, processId });
+      utils.hiring.activities.invalidate({ companyId, processId });
+      utils.hiring.linkState.invalidate({ companyId, processId });
+      toast.success("Envío registrado manualmente");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const revoke = trpc.hiring.revokeLink.useMutation({
+    onSuccess: () => {
+      utils.hiring.linkState.invalidate({ companyId, processId });
+      toast.success("Enlace revocado");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const review = trpc.hiring.updateRequirement.useMutation({
+    onSuccess: () => {
+      utils.hiring.detail.invalidate({ companyId, processId });
+      toast.success("Estado de revisión actualizado");
+    },
+  });
+  const aiFindings = trpc.ai.findings.useQuery(
+    { companyId, processId },
+    { enabled: processId > 0 }
+  );
+  const aiSummary = trpc.ai.summary.useQuery(
+    { companyId, processId, mode: "demo" },
+    { enabled: processId > 0 }
+  );
+  const analyzeAi = trpc.ai.analyzeDocuments.useMutation({
+    onSuccess: () => {
+      utils.ai.findings.invalidate({ companyId, processId });
+      utils.ai.runs.invalidate({ companyId, processId });
+      utils.ai.summary.invalidate({ companyId, processId });
+      toast.success("Análisis DEMO completado; los hallazgos requieren revisión humana");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const reviewAi = trpc.ai.reviewFinding.useMutation({
+    onSuccess: () => {
+      utils.ai.findings.invalidate({ companyId, processId });
+      utils.ai.insights.invalidate({ companyId });
+      toast.success("Corrección de IA registrada");
+    },
+    onError: (error) => toast.error(error.message),
+  });
+
+  useEffect(() => {
+    if (documentUrl.data) {
+      window.open(documentUrl.data, "_blank", "noopener,noreferrer");
+      setActiveDoc(0);
+    }
+  }, [documentUrl.data]);
+
+  if (detail.isLoading) {
+    return (
+      <DashboardLayout roleOverride="HR">
+        <div className="p-8 text-sm text-slate-500">Cargando expediente…</div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!detail.data) {
+    return (
+      <DashboardLayout roleOverride="HR">
+        <div className="p-8 text-sm text-rose-600">
+          Contratación no encontrada para este tenant.
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const { process, candidate, position, company, requirements, documents } = detail.data;
+  const received = requirements.filter((r) =>
+    ["uploaded", "replaced", "verified"].includes(r.status)
+  ).length;
+  const pending = requirements.length - received;
+  const activeLink = Boolean(linkState.data && linkState.data.status === "active");
+  const sent = communications.data?.some((item) => item.status === "sent") || false;
+  const submitted = process.status === "in_review" || process.status === "complete";
+
+  const hiringStatus = getHiringStatusInfo(
+    process.status,
+    requirements.filter((r) => r.required).length,
+    received
+  );
+  const linkStatus = getLinkStatusInfo(linkState.data?.status, activeLink);
+
+  return (
+    <DashboardLayout roleOverride="HR">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <button
+          onClick={() => history.back()}
+          className="flex items-center text-sm text-slate-500 hover:text-slate-900"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Volver a contrataciones
+        </button>
+
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+              Expediente digital
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold">{candidate?.fullName}</h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {position?.name} · {company?.name}
+            </p>
+          </div>
+          <Badge
+            variant="outline"
+            className={cn("w-fit font-normal text-xs px-3 py-1", hiringStatus.className)}
+          >
+            {hiringStatus.label}
+          </Badge>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Documentos requeridos</CardTitle>
+              <p className="text-sm text-slate-500">
+                {received}/{requirements.length} documentos recibidos · {pending} pendientes
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div>
+                    <p className="flex items-center gap-2 text-sm font-semibold text-violet-950">
+                      <BrainCircuit className="h-4 w-4 text-violet-600" />
+                      AI Document Intelligence
+                    </p>
+                    <p className="mt-1 text-xs text-violet-800">
+                      Analiza metadatos de documentos, propone asociaciones y nunca reemplaza la
+                      revisión humana.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => analyzeAi.mutate({ companyId, processId, mode: "demo" })}
+                    disabled={analyzeAi.isPending || documents.length === 0}
+                    className="bg-violet-700 text-white hover:bg-violet-800"
+                  >
+                    <RefreshCcw
+                      className={`mr-1 h-3.5 w-3.5 ${analyzeAi.isPending ? "animate-spin" : ""}`}
+                    />
+                    {analyzeAi.isPending ? "Analizando…" : "Analizar con IA"}
+                  </Button>
+                </div>
+                {aiSummary.data && (
+                  <p className="mt-3 rounded-lg bg-white/70 p-3 text-xs leading-5 text-violet-950">
+                    {aiSummary.data.summary}
+                  </p>
+                )}
+                {aiFindings.data?.length ? (
+                  <div className="mt-3 space-y-2">
+                    {aiFindings.data.slice(0, 6).map((finding) => (
+                      <div key={finding.id} className="rounded-lg bg-white p-3 text-xs">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="font-medium text-slate-900">
+                            {finding.detectedType}
+                          </span>
+                          <Badge
+                            variant={
+                              finding.status === "review_required" ? "destructive" : "outline"
+                            }
+                          >
+                            {finding.confidence}% ·{" "}
+                            {finding.status === "review_required" ? "Revisión" : "Identificado"}
+                          </Badge>
+                        </div>
+                        {finding.issueMessage && (
+                          <p className="mt-1 flex items-start gap-1 text-amber-700">
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            {finding.issueMessage}
+                          </p>
+                        )}
+                        <p className="mt-1 text-slate-500">
+                          Nombre sugerido: {finding.suggestedName || "No disponible"}
+                        </p>
+                        {finding.status === "review_required" && (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                reviewAi.mutate({
+                                  companyId,
+                                  findingId: finding.id,
+                                  status: "confirmed",
+                                })
+                              }
+                            >
+                              <Check className="mr-1 h-3.5 w-3.5" />
+                              Confirmar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setEditingFinding(finding.id)}
+                            >
+                              Corregir
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                reviewAi.mutate({
+                                  companyId,
+                                  findingId: finding.id,
+                                  status: "rejected",
+                                })
+                              }
+                            >
+                              Descartar
+                            </Button>
+                            {editingFinding === finding.id && (
+                              <div className="mt-2 grid gap-2 rounded-lg border border-violet-100 bg-violet-50 p-3 sm:grid-cols-2">
+                                <label className="text-[11px] font-medium text-slate-600">
+                                  Tipo corregido
+                                  <input
+                                    value={editedType || finding.detectedType}
+                                    onChange={(event) => setEditedType(event.target.value)}
+                                    className="mt-1 w-full rounded border px-2 py-1 text-xs"
+                                  />
+                                </label>
+                                <label className="text-[11px] font-medium text-slate-600">
+                                  Requirement ID opcional
+                                  <Input
+                                    value={
+                                      editedRequirement || String(finding.requirementId || "")
+                                    }
+                                    onChange={(event) =>
+                                      setEditedRequirement(event.target.value)
+                                    }
+                                    className="mt-1 h-7 text-xs"
+                                  />
+                                </label>
+                                <div className="flex gap-2 sm:col-span-2">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      const requirementId = Number(editedRequirement);
+                                      reviewAi.mutate({
+                                        companyId,
+                                        findingId: finding.id,
+                                        status: "corrected",
+                                        detectedType: editedType || finding.detectedType,
+                                        ...(requirementId > 0 ? { requirementId } : {}),
+                                      });
+                                      setEditingFinding(null);
+                                      setEditedType("");
+                                      setEditedRequirement("");
+                                    }}
+                                  >
+                                    Guardar corrección
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setEditingFinding(null)}
+                                  >
+                                    Cancelar
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-violet-700">
+                    Ejecuta el análisis para generar hallazgos de esta contratación.
+                  </p>
+                )}
+              </div>
+
+              {requirements.map((req) => {
+                const doc = documents.find((d) => d.requirementId === req.id);
+                return (
+                  <div
+                    key={req.id}
+                    className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"
+                  >
+                    <FileText className="h-4 w-4 text-blue-600" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium">{req.title}</p>
+                      <p className="text-xs text-slate-500">
+                        {doc
+                          ? `${doc.normalizedName} · ${Math.round(doc.sizeBytes / 1024)} KB`
+                          : req.required
+                          ? "Pendiente · obligatorio"
+                          : "Pendiente · opcional"}
+                      </p>
+                    </div>
+                    {doc ? (
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setActiveDoc(doc.id)}
+                        >
+                          <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                          Abrir
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={req.status === "verified" ? "default" : "ghost"}
+                          onClick={() =>
+                            review.mutate({
+                              companyId,
+                              processId,
+                              requirementId: req.id,
+                              status: req.status === "verified" ? "uploaded" : "verified",
+                            })
+                          }
+                        >
+                          {req.status === "verified" ? "Verificado" : "Marcar verificado"}
+                        </Button>
+                      </div>
+                    ) : (
+                      <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                        Pendiente
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Link2 className="h-4 w-4" />
+                  Enlace del candidato
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-500">Estado</span>
+                  <Badge variant={linkStatus.variant} className={cn("font-normal", linkStatus.className)}>
+                    {linkStatus.label}
+                  </Badge>
+                </div>
+                {linkState.data && (
+                  <>
+                    <p className="text-xs text-slate-500">
+                      Creado {dateLabel(linkState.data.createdAt)} · Expira{" "}
+                      {dateLabel(linkState.data.expiresAt)}
+                    </p>
+                    <div className="space-y-2 rounded-lg bg-slate-50 p-3 text-xs">
+                      <p
+                        className={
+                          linkState.data.status !== "expired" &&
+                          linkState.data.status !== "revoked"
+                            ? "text-slate-700"
+                            : "text-slate-400"
+                        }
+                      >
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Enlace generado
+                      </p>
+                      <p className={sent ? "text-slate-700" : "text-slate-400"}>
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Enlace enviado
+                      </p>
+                      <p
+                        className={
+                          linkState.data.lastUsedAt ? "text-slate-700" : "text-slate-400"
+                        }
+                      >
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Enlace abierto{" "}
+                        {linkState.data.lastUsedAt
+                          ? `· ${dateLabel(linkState.data.lastUsedAt)}`
+                          : ""}
+                      </p>
+                      <p className={received > 0 ? "text-slate-700" : "text-slate-400"}>
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Documentos cargados · {received}/{requirements.length}
+                      </p>
+                      <p className={pending === 0 ? "text-slate-700" : "text-slate-400"}>
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Documentación completa
+                      </p>
+                      <p className={submitted ? "text-slate-700" : "text-slate-400"}>
+                        <CheckCircle2 className="mr-1 inline h-3.5 w-3.5" />
+                        Documentación enviada
+                      </p>
+                    </div>
+                  </>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={generate.isPending}
+                    onClick={() => generate.mutate({ companyId, processId })}
+                    className="bg-slate-950 text-white"
+                  >
+                    {activeLink ? "Regenerar enlace" : "Generar enlace"}
+                  </Button>
+                  {link && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(link, "_blank", "noopener,noreferrer")}
+                    >
+                      Abrir portal
+                    </Button>
+                  )}
+                  {activeLink && (
+                    <Button
+                      variant="outline"
+                      onClick={() => revoke.mutate({ companyId, processId })}
+                    >
+                      <ShieldOff className="mr-1 h-4 w-4" />
+                      Revocar
+                    </Button>
+                  )}
+                </div>
+                {link && (
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={link}
+                      className="min-w-0 flex-1 rounded-lg border bg-slate-50 px-3 text-xs"
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() =>
+                        navigator.clipboard.writeText(link).then(() => toast.success("Enlace copiado"))
+                      }
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Mail className="h-4 w-4" />
+                  Comunicación
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-slate-600">{candidate?.email}</p>
+                <p className="text-xs text-slate-500">
+                  PEOPLE AI prepara un borrador y abre tu cliente de correo. El envío lo realizas
+                  tú.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    disabled={prepareEmail.isPending || !activeLink}
+                    onClick={() => setComposeOpen(true)}
+                  >
+                    <Mail className="mr-1 h-4 w-4" />
+                    Enviar documentación
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={prepareReminder.isPending || !activeLink || pending === 0 || !link}
+                    onClick={() =>
+                      prepareReminder.mutate({ companyId, processId, portalUrl: link })
+                    }
+                  >
+                    <Bell className="mr-1 h-4 w-4" />
+                    Enviar recordatorio
+                  </Button>
+                </div>
+                {preparedEmail && (
+                  <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs text-blue-900">
+                    <p className="font-medium">
+                      Borrador preparado para{" "}
+                      {preparedEmail.type === "reminder" ? "recordatorio" : "documentación"}.
+                    </p>
+                    <p className="mt-1">
+                      Después de revisarlo y enviarlo desde tu cliente, registra la acción aquí.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="mt-2"
+                      onClick={() =>
+                        markSent.mutate({
+                          companyId,
+                          processId,
+                          type: preparedEmail.type,
+                          portalUrl: link,
+                        })
+                      }
+                      disabled={markSent.isPending || !link}
+                    >
+                      Marcar como enviado
+                    </Button>
+                  </div>
+                )}
+                {communications.data?.length ? (
+                  <div className="space-y-2 border-t pt-3">
+                    {communications.data.slice(0, 3).map((item) => {
+                      const commStatus = getCommunicationStatusInfo(item.status);
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between text-xs"
+                        >
+                          <span>
+                            {item.type === "reminder" ? "Recordatorio" : "Documentación"}
+                          </span>
+                          <Badge
+                            variant={commStatus.variant}
+                            className={commStatus.className}
+                          >
+                            {commStatus.label}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-500">
+                    Aún no hay comunicaciones registradas.
+                  </p>
+                )}
+                <Button
+                  variant="outline"
+                  disabled={downloadZip.isPending || documents.length === 0}
+                  onClick={() => downloadZip.mutate({ companyId, processId })}
+                >
+                  Descargar expediente ZIP
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        <ContextualAssistant companyId={companyId} processId={processId} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Clock3 className="h-4 w-4" />
+              Actividad reciente
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {activities.isLoading ? (
+              <p className="text-sm text-slate-500">Cargando actividad…</p>
+            ) : activities.data?.length ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {activities.data.slice(0, 8).map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600"
+                  >
+                    <span className="font-medium">{item.type}</span>
+                    <span className="ml-2 text-slate-400">{dateLabel(item.createdAt)}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Sin actividad registrada.</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {composeOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="send-documentation-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-blue-600">
+                  Comunicación
+                </p>
+                <h2
+                  id="send-documentation-title"
+                  className="mt-1 text-xl font-semibold text-slate-950"
+                >
+                  Enviar documentación
+                </h2>
+              </div>
+              <button
+                onClick={() => setComposeOpen(false)}
+                className="text-sm text-slate-500 hover:text-slate-900"
+              >
+                Cerrar
+              </button>
+            </div>
+            <div className="mt-5 space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Candidato
+                </p>
+                <p className="mt-1 font-medium text-slate-900">{candidate?.fullName}</p>
+                <p className="text-slate-500">{candidate?.email}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Asunto
+                </p>
+                <p className="mt-1 rounded-lg bg-slate-50 p-3 text-slate-700">
+                  Documentación requerida para tu proceso de contratación
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Mensaje
+                </p>
+                <p className="mt-1 rounded-lg bg-slate-50 p-3 leading-6 text-slate-600">
+                  Hola {candidate?.fullName},<br />
+                  <br />
+                  Nos encontramos adelantando tu proceso de contratación para el cargo de{" "}
+                  {position?.name}.<br />
+                  <br />
+                  Completa cada documento desde el enlace seguro.<br />
+                  <br />
+                  Gracias,
+                  <br />
+                  Equipo de Talento Humano.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setComposeOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  disabled={prepareEmail.isPending || !link}
+                  onClick={() =>
+                    prepareEmail.mutate({ companyId, processId, portalUrl: link })
+                  }
+                >
+                  <Mail className="mr-2 h-4 w-4" />
+                  Abrir cliente de correo
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </DashboardLayout>
+  );
 }
