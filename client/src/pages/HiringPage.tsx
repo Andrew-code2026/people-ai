@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,8 @@ import { Plus, UserRound, FileText, ArrowUpRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { cn } from "@/lib/utils";
+import { getHiringStatusInfo } from "@/lib/statusFormatters";
 
 export default function HiringPage() {
   const companyId = 4; const utils = trpc.useUtils();
@@ -172,29 +175,35 @@ export default function HiringPage() {
               <span />
             </div>
             {rows.length ? (
-              rows.map(process => (
-                <Link
-                  key={process.id}
-                  href={`/hr/contrataciones/${process.id}`}
-                  className="grid gap-2 border-b px-5 py-4 text-sm transition hover:bg-slate-50 sm:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] sm:items-center"
-                >
-                  <span className="flex items-center gap-2 font-medium">
-                    <UserRound className="h-4 w-4 text-slate-400" />
-                    {process.candidateName}
-                  </span>
-                  <span className="text-slate-500">{process.positionName}</span>
-                  <span className="text-slate-500">
-                    {process.receivedCount}/{process.requiredCount}
-                  </span>
-                  <span className="text-slate-500">
-                    {process.status === "in_review" ? "En revisión" : process.status}
-                  </span>
-                  <span className="text-xs text-slate-400">
-                    {new Date(process.createdAt).toLocaleDateString("es-CO")}
-                  </span>
-                  <ArrowUpRight className="h-4 w-4 text-slate-400" />
-                </Link>
-              ))
+              rows.map(process => {
+                const statusInfo = getHiringStatusInfo(process.status, process.requiredCount, process.receivedCount);
+                return (
+                  <Link
+                    key={process.id}
+                    href={`/hr/contrataciones/${process.id}`}
+                    className="grid gap-2 border-b px-5 py-4 text-sm transition hover:bg-slate-50 sm:grid-cols-[1.4fr_1fr_0.8fr_0.8fr_0.8fr_0.3fr] sm:items-center"
+                  >
+                    <span className="flex items-center gap-2 font-medium">
+                      <UserRound className="h-4 w-4 text-slate-400" />
+                      {process.candidateName}
+                    </span>
+                    <span className="text-slate-500">{process.positionName}</span>
+                    <span className="text-slate-500">
+                      {process.receivedCount}/{process.requiredCount}
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className={cn("w-fit font-normal", statusInfo.className)}
+                    >
+                      {statusInfo.label}
+                    </Badge>
+                    <span className="text-xs text-slate-400">
+                      {new Date(process.createdAt).toLocaleDateString("es-CO")}
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 text-slate-400" />
+                  </Link>
+                );
+              })
             ) : (
               <div className="p-8 text-center text-sm text-slate-500">No hay procesos con estos filtros.</div>
             )}
