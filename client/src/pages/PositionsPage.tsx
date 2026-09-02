@@ -128,10 +128,12 @@ export default function PositionsPage() {
   // New position form
   const [newPositionName, setNewPositionName] = useState("");
   const [newPositionDescription, setNewPositionDescription] = useState("");
+  const [newPositionTemplateId, setNewPositionTemplateId] = useState<string>("");
 
   // New template form
   const [newTemplateName, setNewTemplateName] = useState("");
   const [copyStandardDocs, setCopyStandardDocs] = useState(true);
+  const [assignNewTemplateToCargo, setAssignNewTemplateToCargo] = useState(true);
 
   // Rename template form
   const [editTemplateTitle, setEditTemplateTitle] = useState("");
@@ -192,29 +194,50 @@ export default function PositionsPage() {
     return positionsQuery.data?.find((p) => p.id === selectedPositionId) || null;
   }, [positionsQuery.data, selectedPositionId]);
 
-  // Templates for the selected position
-  const positionTemplates = useMemo(() => {
-    if (!selectedPositionId || !templatesQuery.data) return [];
-    return templatesQuery.data.filter((t) => t.positionId === selectedPositionId);
-  }, [selectedPositionId, templatesQuery.data]);
+  // Helper to determine active template id for position
+  const getPositionAssignedTemplate = (pos: { id: number; templateId?: number | null } | null) => {
+    if (!pos || !templatesQuery.data?.length) return null;
+    if (pos.templateId) {
+      const match = templatesQuery.data.find((t) => t.id === pos.templateId);
+      if (match) return match;
+    }
+    const matchByPos = templatesQuery.data.find((t) => t.positionId === pos.id);
+    if (matchByPos) return matchByPos;
+    const standard = templatesQuery.data.find((t) => t.name === DEFAULT_TEMPLATE_NAME);
+    if (standard) return standard;
+    return templatesQuery.data[0] || null;
+  };
 
-  // Select active template for position
+  // Sync selectedTemplateId whenever selectedPosition changes
   useEffect(() => {
-    if (positionTemplates.length > 0) {
-      const exists = positionTemplates.some((t) => t.id === selectedTemplateId);
-      if (!exists) {
-        setSelectedTemplateId(positionTemplates[0].id);
+    if (selectedPosition) {
+      const assigned = getPositionAssignedTemplate(selectedPosition);
+      if (assigned) {
+        setSelectedTemplateId(assigned.id);
+      } else if (templatesQuery.data && templatesQuery.data.length > 0) {
+        setSelectedTemplateId(templatesQuery.data[0].id);
+      } else {
+        setSelectedTemplateId(null);
       }
     } else {
       setSelectedTemplateId(null);
     }
-  }, [positionTemplates, selectedTemplateId]);
+  }, [selectedPositionId, selectedPosition?.templateId, templatesQuery.data]);
 
   // Active template query
   const templateQuery = trpc.templates.get.useQuery(
     { companyId, templateId: selectedTemplateId! },
     { enabled: Boolean(selectedTemplateId) }
   );
+
+  // Positions using the currently selected template
+  const positionsUsingActiveTemplate = useMemo(() => {
+    if (!selectedTemplateId || !positionsQuery.data) return [];
+    return positionsQuery.data.filter((p) => {
+      const assigned = getPositionAssignedTemplate(p);
+      return assigned?.id === selectedTemplateId;
+    });
+  }, [selectedTemplateId, positionsQuery.data, templatesQuery.data]);
 
   // Mutations
   const createPositionMutation = trpc.positions.create.useMutation({
@@ -224,10 +247,28 @@ export default function PositionsPage() {
       setIsNewPositionOpen(false);
       setNewPositionName("");
       setNewPositionDescription("");
+      setNewPositionTemplateId("");
       toast.success("Cargo creado exitosamente");
     },
     onError: (err) => {
       toast.error(err.message || "Error al crear el cargo");
+    },
+  });
+
+  const assignTemplateMutation = trpc.positions.assignTemplate.useMutation({
+    onSuccess: (data) => {
+      utils.positions.list.invalidate();
+      utils.templates.list.invalidate();
+      if (data.templateId) {
+        setSelectedTemplateId(data.templateId);
+        utils.templates.get.invalidate({ companyId, templateId: data.templateId });
+      }
+      const tName = templatesQuery.data?.find((t) => t.id === data.templateId)?.name || "Plantilla";
+      const pName = selectedPosition?.name || "el cargo";
+      toast.success(`Plantilla "${tName}" asignada a ${pName}`);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Error al asignar la plantilla al cargo");
     },
   });
 
@@ -247,13 +288,14 @@ export default function PositionsPage() {
   const createTemplateMutation = trpc.templates.create.useMutation({
     onSuccess: (data) => {
       utils.templates.list.invalidate();
+      utils.positions.list.invalidate();
       if (data) {
         setSelectedTemplateId(data.id);
         utils.templates.get.invalidate({ companyId, templateId: data.id });
       }
       setIsNewTemplateOpen(false);
       setNewTemplateName("");
-      toast.success("Plantilla personalizada creada");
+      toast.success("Nueva plantilla creada exitosamente");
     },
     onError: (err) => {
       toast.error(err.message || "Error al crear la plantilla");
@@ -262,6 +304,7 @@ export default function PositionsPage() {
 
   const assignDefaultMutation = trpc.templates.assignDefault.useMutation({
     onSuccess: (data) => {
+      utils.positions.list.invalidate();
       utils.templates.list.invalidate();
       if (data) {
         setSelectedTemplateId(data.id);
@@ -322,6 +365,7 @@ export default function PositionsPage() {
   const deleteTemplateMutation = trpc.templates.delete.useMutation({
     onSuccess: () => {
       utils.templates.list.invalidate();
+      utils.positions.list.invalidate();
       toast.success("Plantilla eliminada");
     },
     onError: (err) => {
@@ -337,6 +381,7 @@ export default function PositionsPage() {
       companyId,
       name: newPositionName.trim(),
       description: newPositionDescription.trim() || undefined,
+      templateId: newPositionTemplateId ? Number(newPositionTemplateId) : undefined,
     });
   };
 
@@ -356,7 +401,7 @@ export default function PositionsPage() {
 
   const handleCreateCustomTemplate = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedPositionId || !newTemplateName.trim()) return;
+    if (!newTemplateName.trim()) return;
 
     const baseDocs = masterStandardQuery.data?.items || STANDARD_REFERENCE_DOCS;
     const items = copyStandardDocs
@@ -377,9 +422,9 @@ export default function PositionsPage() {
 
     createTemplateMutation.mutate({
       companyId,
-      positionId: selectedPositionId,
       name: newTemplateName.trim(),
       items,
+      positionId: assignNewTemplateToCargo && selectedPositionId ? selectedPositionId : undefined,
     });
   };
 
@@ -1174,10 +1219,8 @@ export default function PositionsPage() {
                 ) : (
                   positions.map((position) => {
                     const isSelected = selectedPositionId === position.id;
-                    const posTemplates = (templatesQuery.data || []).filter(
-                      (t) => t.positionId === position.id
-                    );
-                    const hasDefault = posTemplates.some((t) => t.name === DEFAULT_TEMPLATE_NAME);
+                    const assignedTemplate = getPositionAssignedTemplate(position);
+                    const hasDefault = assignedTemplate?.name === DEFAULT_TEMPLATE_NAME;
 
                     return (
                       <div
@@ -1231,7 +1274,7 @@ export default function PositionsPage() {
                         )}
 
                         <div className="mt-2.5 flex w-full items-center justify-between gap-2">
-                          {posTemplates.length === 0 ? (
+                          {!assignedTemplate ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600">
                               <AlertCircle className="h-3 w-3" /> Sin plantilla
                             </span>
@@ -1240,13 +1283,13 @@ export default function PositionsPage() {
                               <CheckCircle2 className="h-3 w-3" /> Estándar
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 rounded-md bg-purple-100/80 px-2 py-0.5 text-[11px] font-medium text-purple-700">
-                              <Sparkles className="h-3 w-3" /> {posTemplates[0].name}
+                            <span className="inline-flex items-center gap-1 rounded-md bg-purple-100/80 px-2 py-0.5 text-[11px] font-medium text-purple-700 max-w-[170px] truncate" title={assignedTemplate.name}>
+                              <Sparkles className="h-3 w-3 shrink-0" /> <span className="truncate">{assignedTemplate.name}</span>
                             </span>
                           )}
 
                           <span className="text-[11px] text-slate-400">
-                            {posTemplates.length} plantilla{posTemplates.length !== 1 ? "s" : ""}
+                            1 plantilla
                           </span>
                         </div>
                       </div>
@@ -1264,9 +1307,9 @@ export default function PositionsPage() {
                 {/* Position Summary Card */}
                 <Card className="border-slate-200 bg-white shadow-sm">
                   <CardHeader className="p-5">
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                      <div>
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                             Cargo seleccionado
                           </span>
@@ -1292,28 +1335,49 @@ export default function PositionsPage() {
                         </p>
                       </div>
 
-                      {positionTemplates.length > 1 && (
-                        <div className="w-full sm:w-60">
-                          <Label className="text-xs text-slate-500 mb-1.5 block">
-                            Plantilla activa del cargo:
-                          </Label>
-                          <Select
-                            value={String(selectedTemplateId || "")}
-                            onValueChange={(val) => setSelectedTemplateId(Number(val))}
-                          >
-                            <SelectTrigger className="bg-white">
-                              <SelectValue placeholder="Seleccionar plantilla" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {positionTemplates.map((t) => (
-                                <SelectItem key={t.id} value={String(t.id)}>
-                                  {t.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      )}
+                      {/* Select para asignar plantilla de documentos a este cargo */}
+                      <div className="w-full md:w-80 bg-slate-50/80 border border-slate-200/90 rounded-xl p-3.5 shrink-0">
+                        <Label htmlFor="position-template-select" className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-1.5">
+                          <FileText className="h-3.5 w-3.5 text-blue-600" />
+                          Plantilla asignada al cargo:
+                        </Label>
+                        <Select
+                          value={selectedTemplateId ? String(selectedTemplateId) : ""}
+                          onValueChange={(val) => {
+                            const newId = Number(val);
+                            setSelectedTemplateId(newId);
+                            if (selectedPosition) {
+                              assignTemplateMutation.mutate({
+                                companyId,
+                                positionId: selectedPosition.id,
+                                templateId: newId,
+                              });
+                            }
+                          }}
+                          disabled={assignTemplateMutation.isPending || !templatesQuery.data?.length}
+                        >
+                          <SelectTrigger id="position-template-select" className="bg-white text-xs h-9 font-medium shadow-xs border-slate-300">
+                            <SelectValue placeholder="Seleccionar plantilla..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {(templatesQuery.data || []).map((t) => (
+                              <SelectItem key={t.id} value={String(t.id)} className="text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium">{t.name}</span>
+                                  {t.name === DEFAULT_TEMPLATE_NAME && (
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 bg-blue-50 text-blue-700 border-blue-200">
+                                      Estándar
+                                    </Badge>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="mt-1.5 text-[11px] text-slate-500 leading-tight">
+                          Requisitos documentales que se solicitarán en las contrataciones de este cargo.
+                        </p>
+                      </div>
                     </div>
                   </CardHeader>
                 </Card>
@@ -1332,7 +1396,7 @@ export default function PositionsPage() {
                   <div className="flex items-center gap-2">
                     <Button
                       onClick={() => setIsNewTemplateOpen(true)}
-                      className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                      className="bg-blue-600 text-white hover:bg-blue-700 shadow-sm text-xs font-semibold"
                       size="sm"
                     >
                       <Plus className="mr-1.5 h-4 w-4" />
@@ -1342,7 +1406,7 @@ export default function PositionsPage() {
                 </div>
 
                 {/* Template Documents Card */}
-                {positionTemplates.length === 0 ? (
+                {!selectedTemplateId || !templateQuery.data ? (
                   <Card className="border-dashed border-2 border-slate-300 bg-slate-50/50 p-8 text-center">
                     <div className="mx-auto max-w-md space-y-3">
                       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 text-blue-600">
@@ -1368,7 +1432,7 @@ export default function PositionsPage() {
                           onClick={() => setIsNewTemplateOpen(true)}
                         >
                           <Plus className="mr-1.5 h-4 w-4" />
-                          Crear Plantilla Personalizada
+                          Crear Nueva Plantilla
                         </Button>
                       </div>
                     </div>
@@ -1405,6 +1469,12 @@ export default function PositionsPage() {
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
+                            )}
+
+                            {positionsUsingActiveTemplate.length > 1 && (
+                              <Badge variant="outline" className="text-[11px] bg-slate-50 text-slate-700 border-slate-200 font-normal">
+                                Asignada a {positionsUsingActiveTemplate.length} cargos
+                              </Badge>
                             )}
                           </div>
                           <CardDescription className="text-xs text-slate-500">
@@ -1640,7 +1710,7 @@ export default function PositionsPage() {
                 <Textarea
                   id="edit-doc-desc"
                   value={editingDocDesc}
-                  onChange={(e) => setNewDocDesc(e.target.value)}
+                  onChange={(e) => setEditingDocDesc(e.target.value)}
                   placeholder="Instrucciones para el candidato sobre vigencia, formato o emisor..."
                   className="mt-1.5 resize-none text-xs"
                   rows={3}
@@ -1762,7 +1832,7 @@ export default function PositionsPage() {
                   value={newPositionName}
                   onChange={(e) => setNewPositionName(e.target.value)}
                   placeholder="Ej. Desarrollador Frontend, Analista Financiero..."
-                  className="mt-1.5"
+                  className="mt-1.5 text-xs"
                   required
                 />
               </div>
@@ -1779,6 +1849,34 @@ export default function PositionsPage() {
                   className="mt-1.5 resize-none text-xs"
                   rows={3}
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="position-template" className="text-xs font-semibold">
+                  Plantilla documental inicial (opcional)
+                </Label>
+                <Select
+                  value={newPositionTemplateId}
+                  onValueChange={setNewPositionTemplateId}
+                >
+                  <SelectTrigger id="position-template" className="mt-1.5 text-xs bg-white">
+                    <SelectValue placeholder="Plantilla estándar de la empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(templatesQuery.data || []).map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)} className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span>{t.name}</span>
+                          {t.name === DEFAULT_TEMPLATE_NAME && (
+                            <Badge variant="secondary" className="text-[10px] px-1 py-0 bg-blue-50 text-blue-700">
+                              Estándar
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1802,17 +1900,16 @@ export default function PositionsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG: Nueva Plantilla Personalizada */}
+      {/* DIALOG: Nueva Plantilla Reutilizable */}
       <Dialog open={isNewTemplateOpen} onOpenChange={setIsNewTemplateOpen}>
         <DialogContent className="sm:max-w-md">
           <form onSubmit={handleCreateCustomTemplate}>
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">
-                Crear Plantilla Personalizada
+                Crear Nueva Plantilla de Documentos
               </DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
-                Define una plantilla documental personalizada para{" "}
-                <span className="font-semibold text-slate-800">{selectedPosition?.name}</span>.
+                Crea una plantilla documental reutilizable para asignar a cualquier cargo de la organización.
               </DialogDescription>
             </DialogHeader>
 
@@ -1826,12 +1923,12 @@ export default function PositionsPage() {
                   value={newTemplateName}
                   onChange={(e) => setNewTemplateName(e.target.value)}
                   placeholder="Ej. Expediente Especializado con Certificaciones Cloud"
-                  className="mt-1.5"
+                  className="mt-1.5 text-xs"
                   required
                 />
               </div>
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5">
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-3">
                 <div className="flex items-start gap-3">
                   <Switch
                     id="copy-standard"
@@ -1848,6 +1945,25 @@ export default function PositionsPage() {
                     </p>
                   </div>
                 </div>
+
+                {selectedPosition && (
+                  <div className="flex items-start gap-3 pt-2.5 border-t border-slate-200">
+                    <Switch
+                      id="assign-to-current"
+                      checked={assignNewTemplateToCargo}
+                      onCheckedChange={setAssignNewTemplateToCargo}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <Label htmlFor="assign-to-current" className="text-xs font-semibold cursor-pointer">
+                        Asignar de inmediato a "{selectedPosition.name}"
+                      </Label>
+                      <p className="mt-0.5 text-[11px] text-slate-500">
+                        Vinculará esta plantilla al cargo actualmente seleccionado.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1864,7 +1980,7 @@ export default function PositionsPage() {
                 disabled={newTemplateName.trim().length < 2 || createTemplateMutation.isPending}
                 className="bg-blue-600 text-white hover:bg-blue-700"
               >
-                {createTemplateMutation.isPending ? "Creando..." : "Crear y Asignar"}
+                {createTemplateMutation.isPending ? "Creando..." : "Crear Plantilla"}
               </Button>
             </DialogFooter>
           </form>
@@ -1884,7 +2000,7 @@ export default function PositionsPage() {
             <DialogDescription className="text-xs text-slate-500 pt-2">
               ¿Estás seguro de que deseas eliminar el cargo{" "}
               <span className="font-semibold text-slate-900">"{positionToDelete?.name}"</span>?
-              Esta acción archivará el cargo y sus plantillas de documentos asociadas.
+              Esta acción archivará el perfil del cargo sin afectar las plantillas globales compartidas.
             </DialogDescription>
           </DialogHeader>
 

@@ -37,21 +37,118 @@ export const DEFAULT_STANDARD_DOCUMENTS = [
   { title: "Examen Médico de Ingreso", description: "Concepto de aptitud laboral emitido por IPS autorizada", required: true, sortOrder: 6 },
 ];
 
-export async function listPositions(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.status, "active"))).orderBy(asc(jobPositions.name)); }
-export async function createPosition(companyId: number, name: string, description?: string, userId?: number) { const db = await getDb(); if (!db) return 999; const result = await db.insert(jobPositions).values({ companyId, name, description: description || null }); const id = Number(result[0].insertId); await audit(companyId, "job_position_created", { id, name }, userId); return id; }
+export async function listPositions(companyId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const positions = await db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.status, "active"))).orderBy(asc(jobPositions.name));
+  
+  const allTemplates = await db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active")));
+  const standardTemplate = allTemplates.find(t => t.name === DEFAULT_TEMPLATE_NAME);
+
+  return positions.map(pos => {
+    let resolvedTemplateId = pos.templateId;
+    if (!resolvedTemplateId || !allTemplates.some(t => t.id === resolvedTemplateId)) {
+      const matchByPosition = allTemplates.find(t => t.positionId === pos.id);
+      if (matchByPosition) {
+        resolvedTemplateId = matchByPosition.id;
+      } else if (standardTemplate) {
+        resolvedTemplateId = standardTemplate.id;
+      }
+    }
+    return {
+      ...pos,
+      templateId: resolvedTemplateId ?? null,
+    };
+  });
+}
+
+export async function createPosition(companyId: number, name: string, description?: string, templateId?: number, userId?: number) {
+  const db = await getDb();
+  if (!db) return 999;
+  
+  let initialTemplateId = templateId;
+  if (!initialTemplateId) {
+    const standard = (await db.select().from(documentTemplates).where(and(
+      eq(documentTemplates.companyId, companyId),
+      eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
+      eq(documentTemplates.status, "active")
+    )).limit(1))[0];
+    if (standard) {
+      initialTemplateId = standard.id;
+    }
+  }
+
+  const result = await db.insert(jobPositions).values({
+    companyId,
+    name,
+    description: description || null,
+    templateId: initialTemplateId || null,
+  });
+  const id = Number(result[0].insertId);
+  await audit(companyId, "job_position_created", { id, name, templateId: initialTemplateId }, userId);
+  return id;
+}
+
+export async function assignTemplateToPosition(companyId: number, positionId: number, templateId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) return { success: true, positionId, templateId };
+  const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
+  if (!position) throw new Error("Cargo no encontrado");
+  
+  const template = (await db.select().from(documentTemplates).where(and(eq(documentTemplates.id, templateId), eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active"))).limit(1))[0];
+  if (!template) throw new Error("Plantilla no encontrada");
+
+  await db.update(jobPositions).set({ templateId, updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
+  await audit(companyId, "position_template_assigned", { positionId, templateId, templateName: template.name }, userId);
+  return { success: true, positionId, templateId };
+}
+
 export async function deletePosition(companyId: number, positionId: number, userId?: number) {
   const db = await getDb();
   if (!db) return { success: true, id: positionId };
   const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
   if (!position) throw new Error("Cargo no encontrado");
   await db.update(jobPositions).set({ status: "archived", updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
-  await db.update(documentTemplates).set({ status: "archived", updatedAt: new Date() }).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.positionId, positionId)));
   await audit(companyId, "job_position_deleted", { positionId, name: position.name }, userId);
   return { success: true, id: positionId };
 }
 export async function listTemplates(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active"))).orderBy(desc(documentTemplates.updatedAt)); }
 export async function getTemplate(companyId: number, templateId: number) { const db = await getDb(); if (!db) return null; const template = (await db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId))).limit(1))[0]; if (!template) return null; const items = await db.select().from(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))).orderBy(asc(documentTemplateItems.sortOrder)); return { ...template, items }; }
-export async function createTemplate(companyId: number, positionId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0]; if (!position) throw new Error("Position not found"); const result = await db.insert(documentTemplates).values({ companyId, positionId, name }); const templateId = Number(result[0].insertId); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_created", { templateId, positionId }, userId); return getTemplate(companyId, templateId); }
+export async function createTemplate(companyId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, positionId?: number, userId?: number) {
+  const db = await getDb();
+  if (!db) {
+    return {
+      id: 999,
+      companyId,
+      positionId: positionId || null,
+      name,
+      status: "active" as const,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      items: items.map((it, idx) => ({
+        id: idx + 1,
+        companyId,
+        templateId: 999,
+        title: it.title,
+        description: it.description || null,
+        required: it.required,
+        sortOrder: it.sortOrder,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+    };
+  }
+  const result = await db.insert(documentTemplates).values({ companyId, positionId: positionId || null, name });
+  const templateId = Number(result[0].insertId);
+  if (items.length) {
+    await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId })));
+  }
+  if (positionId) {
+    await db.update(jobPositions).set({ templateId, updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
+  }
+  await audit(companyId, "document_template_created", { templateId, positionId, name }, userId);
+  return getTemplate(companyId, templateId);
+}
 export async function updateTemplate(companyId: number, templateId: number, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const template = await getTemplate(companyId, templateId); if (!template) throw new Error("Template not found"); await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_updated", { templateId }, userId); return getTemplate(companyId, templateId); }
 export async function getMasterStandardTemplate(companyId: number) {
   const db = await getDb();
@@ -119,20 +216,17 @@ export async function updateMasterStandardTemplate(
       await db.update(documentTemplates).set({ updatedAt: new Date() }).where(eq(documentTemplates.id, t.id));
     }
   } else {
-    const positions = await db.select().from(jobPositions).where(eq(jobPositions.companyId, companyId)).limit(1);
-    if (positions.length > 0) {
-      const res = await db.insert(documentTemplates).values({
-        companyId,
-        positionId: positions[0].id,
-        name: DEFAULT_TEMPLATE_NAME,
-        status: "active"
-      });
-      const tId = Number(res[0].insertId);
-      if (items.length) {
-        await db.insert(documentTemplateItems).values(
-          items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: tId }))
-        );
-      }
+    const res = await db.insert(documentTemplates).values({
+      companyId,
+      positionId: null,
+      name: DEFAULT_TEMPLATE_NAME,
+      status: "active"
+    });
+    const tId = Number(res[0].insertId);
+    if (items.length) {
+      await db.insert(documentTemplateItems).values(
+        items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: tId }))
+      );
     }
   }
 
@@ -144,14 +238,13 @@ export async function assignDefaultTemplate(companyId: number, positionId: numbe
   const db = await getDb();
   if (!db) throw new Error("Database unavailable");
   const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
-  if (!position) throw new Error("Position not found");
+  if (!position) throw new Error("Cargo no encontrado");
 
   const master = await getMasterStandardTemplate(companyId);
   const itemsToAssign = master.items.length > 0 ? master.items : DEFAULT_STANDARD_DOCUMENTS;
 
   let template = (await db.select().from(documentTemplates).where(and(
     eq(documentTemplates.companyId, companyId),
-    eq(documentTemplates.positionId, positionId),
     eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
     eq(documentTemplates.status, "active")
   )).limit(1))[0];
@@ -159,7 +252,7 @@ export async function assignDefaultTemplate(companyId: number, positionId: numbe
   if (!template) {
     const result = await db.insert(documentTemplates).values({
       companyId,
-      positionId,
+      positionId: null,
       name: DEFAULT_TEMPLATE_NAME,
       status: "active"
     });
@@ -167,16 +260,12 @@ export async function assignDefaultTemplate(companyId: number, positionId: numbe
     await db.insert(documentTemplateItems).values(
       itemsToAssign.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId }))
     );
-    await audit(companyId, "document_template_default_assigned", { templateId, positionId }, userId);
-    return getTemplate(companyId, templateId);
-  } else {
-    await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, template.id)));
-    await db.insert(documentTemplateItems).values(
-      itemsToAssign.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: template.id }))
-    );
-    await audit(companyId, "document_template_default_reassigned", { templateId: template.id, positionId }, userId);
-    return getTemplate(companyId, template.id);
+    template = (await db.select().from(documentTemplates).where(eq(documentTemplates.id, templateId)).limit(1))[0];
   }
+
+  await db.update(jobPositions).set({ templateId: template.id, updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
+  await audit(companyId, "document_template_default_assigned", { templateId: template.id, positionId }, userId);
+  return getTemplate(companyId, template.id);
 }
 export async function updateTemplateName(companyId: number, templateId: number, name: string, userId?: number) {
   const db = await getDb();
@@ -187,15 +276,46 @@ export async function updateTemplateName(companyId: number, templateId: number, 
 }
 export async function deleteTemplate(companyId: number, templateId: number, userId?: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
+  if (!db) return { success: true, id: templateId };
   const template = await getTemplate(companyId, templateId);
-  if (!template) throw new Error("Template not found");
+  if (!template) throw new Error("Plantilla no encontrada");
+  if (template.name === DEFAULT_TEMPLATE_NAME) {
+    throw new Error("No se puede eliminar la plantilla estándar principal de la empresa");
+  }
   await db.update(documentTemplates).set({ status: "archived", updatedAt: new Date() }).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId)));
+  
+  const standardTemplate = (await db.select().from(documentTemplates).where(and(
+    eq(documentTemplates.companyId, companyId),
+    eq(documentTemplates.name, DEFAULT_TEMPLATE_NAME),
+    eq(documentTemplates.status, "active")
+  )).limit(1))[0];
+
+  if (standardTemplate) {
+    await db.update(jobPositions).set({ templateId: standardTemplate.id, updatedAt: new Date() }).where(and(
+      eq(jobPositions.companyId, companyId),
+      eq(jobPositions.templateId, templateId)
+    ));
+  }
+
   await audit(companyId, "document_template_deleted", { templateId, name: template.name }, userId);
   return { success: true, id: templateId };
 }
 export async function listHiring(companyId: number) { const db = await getDb(); if (!db) return []; const processes = await db.select().from(hiringProcesses).where(eq(hiringProcesses.companyId, companyId)).orderBy(desc(hiringProcesses.createdAt)); return Promise.all(processes.map(async process => { const detail = await getHiringDetail(companyId, process.id); return { ...process, candidateName: detail?.candidate?.fullName || "Candidato", positionName: detail?.position?.name || "Cargo", requiredCount: detail?.requirements.filter(r => r.required).length || 0, receivedCount: detail?.requirements.filter(r => ["uploaded", "replaced", "verified"].includes(r.status)).length || 0 }; })); }
-export async function createHiring(companyId: number, userId: number, input: { fullName: string; identificationNumber: string; email: string; positionId: number; templateId: number }) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const template = await getTemplate(companyId, input.templateId); if (!template || template.positionId !== input.positionId) throw new Error("Template not found"); const candidateResult = await db.insert(candidateProfiles).values({ companyId, fullName: input.fullName, identificationNumber: input.identificationNumber, email: input.email }); const candidateId = Number(candidateResult[0].insertId); const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending" }); const processId = Number(processResult[0].insertId); await db.insert(hiringRequirements).values(template.items.map(item => ({ companyId, processId, sourceTemplateItemId: item.id, title: item.title, description: item.description, required: item.required, sortOrder: item.sortOrder }))); await audit(companyId, "hiring_process_created", { processId, candidateId }, userId); return getHiringDetail(companyId, processId); }
+export async function createHiring(companyId: number, userId: number, input: { fullName: string; identificationNumber: string; email: string; positionId: number; templateId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const template = await getTemplate(companyId, input.templateId);
+  if (!template || template.companyId !== companyId) throw new Error("Plantilla no encontrada");
+  const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, input.positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
+  if (!position) throw new Error("Cargo no encontrado");
+  const candidateResult = await db.insert(candidateProfiles).values({ companyId, fullName: input.fullName, identificationNumber: input.identificationNumber, email: input.email });
+  const candidateId = Number(candidateResult[0].insertId);
+  const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending" });
+  const processId = Number(processResult[0].insertId);
+  await db.insert(hiringRequirements).values(template.items.map(item => ({ companyId, processId, sourceTemplateItemId: item.id, title: item.title, description: item.description, required: item.required, sortOrder: item.sortOrder })));
+  await audit(companyId, "hiring_process_created", { processId, candidateId }, userId);
+  return getHiringDetail(companyId, processId);
+}
 export async function getHiringDetail(companyId: number, processId: number) { const db = await getDb(); if (!db) return null; const process = (await db.select().from(hiringProcesses).where(and(eq(hiringProcesses.companyId, companyId), eq(hiringProcesses.id, processId))).limit(1))[0]; if (!process) return null; const candidate = (await db.select().from(candidateProfiles).where(and(eq(candidateProfiles.companyId, companyId), eq(candidateProfiles.id, process.candidateId))).limit(1))[0]; const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, process.positionId))).limit(1))[0]; const company = (await db.select().from(companies).where(eq(companies.id, companyId)).limit(1))[0]; const requirements = await db.select().from(hiringRequirements).where(and(eq(hiringRequirements.companyId, companyId), eq(hiringRequirements.processId, processId))).orderBy(asc(hiringRequirements.sortOrder)); const documents = await db.select().from(candidateDocuments).where(and(eq(candidateDocuments.companyId, companyId), eq(candidateDocuments.processId, processId), eq(candidateDocuments.status, "active"))); return { process, candidate, position, company, requirements, documents }; }
 export async function updateRequirement(companyId: number, processId: number, requirementId: number, patch: { title?: string; required?: boolean; status?: "pending" | "uploaded" | "replaced" | "removed" | "verified" }, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(hiringRequirements).set(patch).where(and(eq(hiringRequirements.companyId, companyId), eq(hiringRequirements.processId, processId), eq(hiringRequirements.id, requirementId))); await audit(companyId, "hiring_requirement_updated", { processId, requirementId }, userId); return getHiringDetail(companyId, processId); }
 export async function generateLink(companyId: number, processId: number, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const detail = await getHiringDetail(companyId, processId); if (!detail) throw new Error("Hiring process not found"); await db.update(candidateAccessLinks).set({ status: "revoked", revokedAt: new Date() }).where(and(eq(candidateAccessLinks.companyId, companyId), eq(candidateAccessLinks.processId, processId), eq(candidateAccessLinks.status, "active"))); const token = randomBytes(32).toString("base64url"); await db.insert(candidateAccessLinks).values({ companyId, processId, candidateId: detail.process.candidateId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 7 * 86400000) }); await audit(companyId, "candidate_link_generated", { processId }, userId); await activity(companyId, processId, "link_generated", "analyst", userId); return { token, expiresAt: new Date(Date.now() + 7 * 86400000) }; }

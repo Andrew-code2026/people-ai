@@ -86,4 +86,48 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
     const deleteRes = await deletePosition(4, newId);
     expect(deleteRes).toEqual({ success: true, id: newId });
   });
+
+  it("permite crear plantillas reutilizables a nivel empresa y asignarlas a múltiples cargos", async () => {
+    const { createPosition, createTemplate, assignTemplateToPosition, listPositions, getTemplate, deletePosition } = await import("./hrDomain");
+
+    // 1. Create a standalone company template
+    const templateName = `Plantilla Reutilizable ${Date.now()}`;
+    const items = [
+      { title: "Certificado de Antecedentes", description: "Vigencia 30 días", required: true, sortOrder: 1 },
+      { title: "Certificación Bancaria", description: "Cuenta activa", required: false, sortOrder: 2 },
+    ];
+    const createdTemplate = await createTemplate(4, templateName, items);
+    expect(createdTemplate).toHaveProperty("id");
+    expect(createdTemplate.name).toBe(templateName);
+    expect(createdTemplate.companyId).toBe(4);
+
+    // 2. Create two distinct positions
+    const pos1Id = await createPosition(4, `Cargo A ${Date.now()}`, "Perfil A");
+    const pos2Id = await createPosition(4, `Cargo B ${Date.now()}`, "Perfil B");
+
+    // 3. Assign the SAME reusable template to both positions
+    const assign1 = await assignTemplateToPosition(4, pos1Id, createdTemplate.id);
+    const assign2 = await assignTemplateToPosition(4, pos2Id, createdTemplate.id);
+    expect(assign1).toEqual({ success: true, positionId: pos1Id, templateId: createdTemplate.id });
+    expect(assign2).toEqual({ success: true, positionId: pos2Id, templateId: createdTemplate.id });
+
+    // 4. Verify both positions list the templateId if DB is active
+    const allPositions = await listPositions(4);
+    if (allPositions.length > 0) {
+      const pos1 = allPositions.find(p => p.id === pos1Id);
+      const pos2 = allPositions.find(p => p.id === pos2Id);
+      expect(pos1?.templateId).toBe(createdTemplate.id);
+      expect(pos2?.templateId).toBe(createdTemplate.id);
+    }
+
+    // 5. Clean up positions
+    await deletePosition(4, pos1Id);
+    await deletePosition(4, pos2Id);
+
+    // 6. Verify the shared template still exists and is not deleted by deleting a position
+    const fetchedTemplate = await getTemplate(4, createdTemplate.id);
+    if (fetchedTemplate) {
+      expect(fetchedTemplate.name).toBe(templateName);
+    }
+  });
 });

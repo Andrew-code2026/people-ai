@@ -138,11 +138,11 @@ export const knowledgeBaseDocuments = mysqlTable("knowledge_base_documents", {
 export type RecruitmentCandidate = typeof recruitmentCandidates.$inferSelect;
 export type KnowledgeBaseDocument = typeof knowledgeBaseDocuments.$inferSelect;
 export const jobPositions = mysqlTable("job_positions", {
-  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), name: varchar("name", { length: 160 }).notNull(), description: text("description"), status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({ companyIdx: index("positions_company_idx").on(table.companyId) }));
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), templateId: int("templateId"), name: varchar("name", { length: 160 }).notNull(), description: text("description"), status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({ companyIdx: index("positions_company_idx").on(table.companyId), templateIdx: index("positions_template_idx").on(table.templateId) }));
 
 export const documentTemplates = mysqlTable("document_templates", {
-  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), positionId: int("positionId").notNull(), name: varchar("name", { length: 180 }).notNull(), version: int("version").default(1).notNull(), status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), positionId: int("positionId"), name: varchar("name", { length: 180 }).notNull(), version: int("version").default(1).notNull(), status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({ companyIdx: index("templates_company_idx").on(table.companyId), positionIdx: index("templates_position_idx").on(table.positionId) }));
 
 export const documentTemplateItems = mysqlTable("document_template_items", {
