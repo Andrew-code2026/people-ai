@@ -1061,7 +1061,7 @@ export default function PositionsPage() {
           {/* DIALOG: Editar Documento de la Plantilla Estándar */}
           <Dialog open={isEditMasterDocDialogOpen} onOpenChange={setIsEditMasterDocDialogOpen}>
             <DialogContent className="sm:max-w-lg">
-              <form onSubmit={handleSaveMasterDocEdit}>
+              <form onSubmit={handleSaveMasterDocEdit} className="w-full min-w-0">
                 <DialogHeader>
                   <DialogTitle className="text-lg font-bold">
                     Editar Documento Estándar
@@ -1071,7 +1071,7 @@ export default function PositionsPage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4">
+                <div className="space-y-4 py-4 w-full min-w-0">
                   <div>
                     <Label htmlFor="edit-master-title" className="text-xs font-semibold">
                       Título del documento *
@@ -1680,7 +1680,7 @@ export default function PositionsPage() {
       {/* DIALOG: Editar Documento Individual */}
       <Dialog open={isEditDocOpen} onOpenChange={setIsEditDocOpen}>
         <DialogContent className="sm:max-w-md">
-          <form onSubmit={handleSaveDocEdit}>
+          <form onSubmit={handleSaveDocEdit} className="w-full min-w-0">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">Editar Documento</DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
@@ -1688,7 +1688,7 @@ export default function PositionsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 w-full min-w-0">
               <div>
                 <Label htmlFor="edit-doc-title" className="text-xs font-semibold">
                   Título del documento *
@@ -1760,6 +1760,7 @@ export default function PositionsPage() {
       <Dialog open={isRenameTemplateOpen} onOpenChange={setIsRenameTemplateOpen}>
         <DialogContent className="sm:max-w-md">
           <form
+            className="w-full min-w-0"
             onSubmit={(e) => {
               e.preventDefault();
               if (!selectedTemplateId || !editTemplateTitle.trim()) return;
@@ -1777,7 +1778,7 @@ export default function PositionsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="py-4">
+            <div className="py-4 w-full min-w-0">
               <Label htmlFor="template-new-name" className="text-xs font-semibold">
                 Nombre de la plantilla *
               </Label>
@@ -1814,7 +1815,7 @@ export default function PositionsPage() {
       {/* DIALOG: Nuevo Cargo */}
       <Dialog open={isNewPositionOpen} onOpenChange={setIsNewPositionOpen}>
         <DialogContent className="sm:max-w-md">
-          <form onSubmit={handleCreatePosition}>
+          <form onSubmit={handleCreatePosition} className="w-full min-w-0">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">Crear Nuevo Cargo</DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
@@ -1822,7 +1823,7 @@ export default function PositionsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 w-full min-w-0">
               <div>
                 <Label htmlFor="position-name" className="text-xs font-semibold">
                   Nombre del cargo *
@@ -1903,7 +1904,7 @@ export default function PositionsPage() {
       {/* DIALOG: Nueva Plantilla Reutilizable */}
       <Dialog open={isNewTemplateOpen} onOpenChange={setIsNewTemplateOpen}>
         <DialogContent className="sm:max-w-md">
-          <form onSubmit={handleCreateCustomTemplate}>
+          <form onSubmit={handleCreateCustomTemplate} className="w-full min-w-0">
             <DialogHeader>
               <DialogTitle className="text-lg font-bold">
                 Crear Nueva Plantilla de Documentos
@@ -1913,7 +1914,7 @@ export default function PositionsPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
+            <div className="space-y-4 py-4 w-full min-w-0">
               <div>
                 <Label htmlFor="template-name" className="text-xs font-semibold">
                   Nombre de la plantilla *

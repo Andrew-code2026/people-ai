@@ -35,7 +35,7 @@ function SelectTrigger({
       data-slot="select-trigger"
       data-size={size}
       className={cn(
-        "group flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 shadow-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 hover:border-slate-300 dark:hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive data-[placeholder]:text-slate-400 dark:data-[placeholder]:text-slate-500 data-[size=default]:h-9 data-[size=sm]:h-8 [&>span]:line-clamp-1 [&>span]:truncate [&>span]:text-left [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "group flex w-full min-w-0 max-w-full items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm font-medium text-slate-900 dark:text-slate-100 shadow-xs transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70 hover:border-slate-300 dark:hover:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive data-[placeholder]:text-slate-400 dark:data-[placeholder]:text-slate-500 data-[size=default]:h-9 data-[size=sm]:h-8 [&>span]:line-clamp-1 [&>span]:truncate [&>span]:text-left [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className
       )}
       {...props}
