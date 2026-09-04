@@ -5,14 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Link } from "wouter";
 import { Bell, ArrowUpRight, BrainCircuit, CheckCircle2 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { getInsightStatusInfo } from "@/lib/statusFormatters";
 
 export default function NotificationsPage() {
-  const companyId = 4;
-  const notifications = trpc.hiring.notifications.useQuery({ companyId });
-  const insights = trpc.ai.insights.useQuery({ companyId });
+  const { companyId, ready } = useCompanyId();
+  const notifications = trpc.hiring.notifications.useQuery({ companyId }, { enabled: ready });
+  const insights = trpc.ai.insights.useQuery({ companyId }, { enabled: ready });
   const utils = trpc.useUtils();
   const updateInsight = trpc.ai.updateInsight.useMutation({
     onSuccess: () => {
