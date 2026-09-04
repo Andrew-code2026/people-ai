@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
+import { getDbSsl } from "./server/dbSsl";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -18,9 +19,6 @@ export default defineConfig({
     user: decodeURIComponent(parsedUrl.username),
     password: decodeURIComponent(parsedUrl.password),
     database: parsedUrl.pathname.replace(/^\//, "") || "test",
-    ssl: {
-      minVersion: "TLSv1.2",
-      rejectUnauthorized: true,
-    },
+    ssl: getDbSsl(connectionString),
   },
 });

@@ -1,7 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { appProfiles, companies, departments, employees, knowledgeBaseDocuments, recruitmentCandidates, type InsertUser, users } from "../drizzle/schema";
-import { ENV } from "./_core/env";
+import { getDbSsl } from "./dbSsl";
+import { appProfiles, companies, departments, employees, knowledgeBaseDocuments, recruitmentCandidates, users } from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _migrated = false;
@@ -59,10 +59,7 @@ export async function getDb() {
       _db = drizzle({
         connection: {
           uri: process.env.DATABASE_URL,
-          ssl: {
-            minVersion: "TLSv1.2",
-            rejectUnauthorized: true,
-          },
+          ssl: getDbSsl(process.env.DATABASE_URL),
         },
       });
       await ensureSchema(_db);
@@ -74,28 +71,31 @@ export async function getDb() {
   return _db;
 }
 
-export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) throw new Error("User openId is required for upsert");
+/** Igual que `getDb()` pero lanza en vez de devolver null.
+ *
+ *  Los helpers de este archivo devuelven []/undefined cuando no hay conexion, lo
+ *  que en lectura es tolerable pero en autenticacion no: un registro "exitoso" que
+ *  no escribio nada seria peor que un error. Todo el camino de auth usa esta version. */
+export async function requireDb() {
   const db = await getDb();
-  if (!db) return;
-  const values: InsertUser = { openId: user.openId };
-  const updateSet: Record<string, unknown> = {};
-  for (const field of ["name", "email", "loginMethod"] as const) {
-    if (user[field] !== undefined) {
-      values[field] = user[field] ?? null;
-      updateSet[field] = user[field] ?? null;
-    }
+  if (!db) {
+    throw new Error(
+      "No hay conexion con la base de datos. Revisa DATABASE_URL antes de autenticar."
+    );
   }
-  values.lastSignedIn = user.lastSignedIn ?? new Date();
-  updateSet.lastSignedIn = values.lastSignedIn;
-  if (user.role !== undefined) {
-    values.role = user.role;
-    updateSet.role = user.role;
-  } else if (user.openId === ENV.ownerOpenId) {
-    values.role = "admin";
-    updateSet.role = "admin";
-  }
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  return db;
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await requireDb();
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
+export async function getUserById(id: number) {
+  const db = await requireDb();
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
 }
 
 export async function getUserByOpenId(openId: string) {
@@ -111,7 +111,14 @@ export async function getAppProfile(userId: number, companyId?: number | null) {
   const conditions = companyId == null
     ? eq(appProfiles.userId, userId)
     : and(eq(appProfiles.userId, userId), eq(appProfiles.companyId, companyId));
-  const result = await db.select().from(appProfiles).where(conditions).limit(1);
+  // Orden explicito: sin el, un usuario con perfil en varias empresas obtendria
+  // una al azar segun el plan de ejecucion.
+  const result = await db
+    .select()
+    .from(appProfiles)
+    .where(conditions)
+    .orderBy(asc(appProfiles.id))
+    .limit(1);
   return result[0];
 }
 

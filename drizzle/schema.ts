@@ -15,12 +15,16 @@ export const users = mysqlTable("users", {
   openId: varchar("openId", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  // Null = la cuenta no puede iniciar sesion con contrasena (usuarios demo/OAuth heredados).
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  // Se incrementa al cambiar la contrasena para invalidar las sesiones ya emitidas.
+  sessionVersion: int("sessionVersion").default(0).notNull(),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
-});
+}, (table) => ({ emailIdx: uniqueIndex("users_email_idx").on(table.email) }));
 
 export const companies = mysqlTable("companies", {
   id: int("id").autoincrement().primaryKey(),
