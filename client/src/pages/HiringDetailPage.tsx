@@ -23,6 +23,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -88,7 +89,7 @@ function ContextualAssistant({ companyId, processId }: { companyId: number; proc
 export default function HiringDetailPage() {
   const [, params] = useRoute("/hr/contrataciones/:id");
   const processId = Number(params?.id || 0);
-  const companyId = 4;
+  const { companyId, ready } = useCompanyId();
   const [link, setLink] = useState("");
   const [activeDoc, setActiveDoc] = useState(0);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -104,15 +105,15 @@ export default function HiringDetailPage() {
 
   const detail = trpc.hiring.detail.useQuery(
     { companyId, processId },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const documentUrl = trpc.hiring.documentUrl.useQuery(
     { companyId, processId, documentId: activeDoc },
-    { enabled: activeDoc > 0 }
+    { enabled: ready && activeDoc > 0 }
   );
   const linkState = trpc.hiring.linkState.useQuery(
     { companyId, processId },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const downloadZip = trpc.hiring.downloadZip.useMutation({
     onSuccess: (data) => {
@@ -129,11 +130,11 @@ export default function HiringDetailPage() {
   });
   const communications = trpc.hiring.communications.useQuery(
     { companyId, processId },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const activities = trpc.hiring.activities.useQuery(
     { companyId, processId },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const utils = trpc.useUtils();
   const generate = trpc.hiring.generateLink.useMutation({
@@ -190,11 +191,11 @@ export default function HiringDetailPage() {
   });
   const aiFindings = trpc.ai.findings.useQuery(
     { companyId, processId },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const aiSummary = trpc.ai.summary.useQuery(
     { companyId, processId, mode: "demo" },
-    { enabled: processId > 0 }
+    { enabled: ready && processId > 0 }
   );
   const analyzeAi = trpc.ai.analyzeDocuments.useMutation({
     onSuccess: () => {

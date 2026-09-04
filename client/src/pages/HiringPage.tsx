@@ -10,12 +10,13 @@ import { Plus, UserRound, FileText, ArrowUpRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useCompanyId } from "@/hooks/useCompanyId";
 import { cn } from "@/lib/utils";
 import { getHiringStatusInfo } from "@/lib/statusFormatters";
 
 export default function HiringPage() {
-  const companyId = 4; const utils = trpc.useUtils();
-  const positions = trpc.positions.list.useQuery({ companyId }); const templates = trpc.templates.list.useQuery({ companyId }); const hiring = trpc.hiring.list.useQuery({ companyId });
+  const { companyId, ready } = useCompanyId(); const utils = trpc.useUtils();
+  const positions = trpc.positions.list.useQuery({ companyId }, { enabled: ready }); const templates = trpc.templates.list.useQuery({ companyId }, { enabled: ready }); const hiring = trpc.hiring.list.useQuery({ companyId }, { enabled: ready });
   const [positionId, setPositionId] = useState<string>(""); const [statusFilter, setStatusFilter] = useState("all"); const [positionFilter, setPositionFilter] = useState("all");
   
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function HiringPage() {
 
   const currentPosition = positions.data?.find(p => p.id === Number(positionId));
   const selectedTemplate = templates.data?.find(t => t.id === currentPosition?.templateId) || templates.data?.find(t => t.positionId === Number(positionId)) || templates.data?.[0];
-  const template = trpc.templates.get.useQuery({ companyId, templateId: selectedTemplate?.id || 1 }, { enabled: Boolean(selectedTemplate?.id) });
+  const template = trpc.templates.get.useQuery({ companyId, templateId: selectedTemplate?.id || 1 }, { enabled: ready && Boolean(selectedTemplate?.id) });
   const [fullName, setFullName] = useState(""); const [identificationNumber, setIdentificationNumber] = useState(""); const [email, setEmail] = useState("");
   const create = trpc.hiring.create.useMutation({ onSuccess: () => { utils.hiring.list.invalidate(); toast.success("Contratación creada con snapshot de documentos"); setFullName(""); setIdentificationNumber(""); setEmail(""); } });
   const rows = hiring.data?.filter(row => (statusFilter === "all" || row.status === statusFilter) && (positionFilter === "all" || String(row.positionId) === positionFilter)) || [];

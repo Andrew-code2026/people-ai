@@ -15,7 +15,7 @@ export default function HRDashboard() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const access = trpc.access.me.useQuery(undefined, { retry: false });
-  const companyId = access.data?.companyId ?? 4;
+  const companyId = access.data?.companyId ?? 0;
   const hiring = trpc.hiring.list.useQuery({ companyId }, { enabled: Boolean(companyId) });
   const stats = trpc.hr.stats.useQuery({ companyId }, { enabled: Boolean(companyId) });
   const knowledge = trpc.hr.knowledge.useQuery({ companyId }, { enabled: Boolean(companyId) });

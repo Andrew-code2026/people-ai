@@ -45,6 +45,7 @@ import {
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { useCompanyId } from "@/hooks/useCompanyId";
 
 const DEFAULT_TEMPLATE_NAME = "Expediente de Ingreso Estándar";
 
@@ -96,13 +97,13 @@ interface TemplateItem {
 }
 
 export default function PositionsPage() {
-  const companyId = 4;
+  const { companyId, ready } = useCompanyId();
   const utils = trpc.useUtils();
 
   // Queries
-  const positionsQuery = trpc.positions.list.useQuery({ companyId });
-  const templatesQuery = trpc.templates.list.useQuery({ companyId });
-  const masterStandardQuery = trpc.templates.getMasterStandard.useQuery({ companyId });
+  const positionsQuery = trpc.positions.list.useQuery({ companyId }, { enabled: ready });
+  const templatesQuery = trpc.templates.list.useQuery({ companyId }, { enabled: ready });
+  const masterStandardQuery = trpc.templates.getMasterStandard.useQuery({ companyId }, { enabled: ready });
 
   // State
   const [selectedPositionId, setSelectedPositionId] = useState<number | null>(null);

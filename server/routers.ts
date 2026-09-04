@@ -1,4 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
+import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, signIn, signSession, signUp, toPublicUser } from "./auth";
+import type { TrpcContext } from "./_core/context";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDashboardForRole, assertCompanyScope, assertRole } from "./authorization";
@@ -10,9 +12,6 @@ import { assignDefaultTemplate, assignTemplateToPosition, createHiring, createPo
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
-import { seedDemoData } from "./seed";
-import { sdk } from "./_core/sdk";
-import { ONE_YEAR_MS } from "@shared/const";
 
 const roleSchema = z.enum(["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"]);
 
@@ -23,26 +22,97 @@ async function resolveAccess(user: { id: number; role: string }) {
   throw new TRPCError({ code: "FORBIDDEN", message: "Tu cuenta aún no tiene un perfil empresarial activo." });
 }
 
+const AUTH_ERROR_STATUS: Record<AuthError["code"], TRPCError["code"]> = {
+  INVALID_CREDENTIALS: "UNAUTHORIZED",
+  EMAIL_TAKEN: "CONFLICT",
+  COMPANY_TAKEN: "CONFLICT",
+  RATE_LIMITED: "TOO_MANY_REQUESTS",
+  WEAK_PASSWORD: "BAD_REQUEST",
+};
+
+/** Traduce los errores de dominio de `auth.ts` a codigos tRPC. El modulo de auth
+ *  no conoce tRPC; esta es la unica frontera donde se cruzan.
+ *
+ *  Cualquier otro error se registra en el servidor y se sustituye por un mensaje
+ *  generico: tRPC devuelve `message` al cliente incluso en produccion, y estas
+ *  procedures son publicas, asi que un fallo de base de datos filtraria la consulta
+ *  y los nombres de las columnas a quien no ha iniciado sesion. */
+async function toTrpc<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof AuthError) {
+      throw new TRPCError({ code: AUTH_ERROR_STATUS[error.code], message: error.message });
+    }
+    console.error("[Auth] Error inesperado:", error);
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "No fue posible completar la operacion. Intentalo de nuevo mas tarde.",
+    });
+  }
+}
+
+/** Emite la cookie de sesion tras un alta o un inicio de sesion correctos. */
+async function issueSession(
+  ctx: Pick<TrpcContext, "req" | "res">,
+  openId: string,
+  sessionVersion: number
+): Promise<void> {
+  const token = await signSession({ openId, sessionVersion });
+  const cookieOptions = getSessionCookieOptions(ctx.req);
+  ctx.res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: SESSION_TTL_MS });
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => (opts.ctx.user ? toPublicUser(opts.ctx.user) : null)),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
       return { success: true } as const;
     }),
-    devLogin: publicProcedure.mutation(async ({ ctx }) => {
-      const user = await seedDemoData();
-      if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Error inicializando datos demo" });
-      const sessionToken = await sdk.createSessionToken(user.openId, {
-        name: user.name || "Alexa Torres",
-        expiresInMs: ONE_YEAR_MS,
-      });
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-      return { success: true, user } as const;
-    }),
+    signUp: publicProcedure
+      .input(z.object({
+        // `.trim()` antes de validar: un correo pegado con espacios es habitual y
+        // seria rechazado como invalido pese a que auth.ts lo normaliza despues.
+        email: z.string().trim().email("Correo invalido").max(320),
+        password: z.string().min(MIN_PASSWORD_LENGTH, `Minimo ${MIN_PASSWORD_LENGTH} caracteres`).max(200),
+        name: z.string().trim().min(1, "El nombre es obligatorio").max(160),
+        companyName: z.string().trim().min(1, "El nombre de la empresa es obligatorio").max(160),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const { user, companyId } = await toTrpc(() => signUp(input));
+        await issueSession(ctx, user.openId, user.sessionVersion);
+        return { user: toPublicUser(user), companyId } as const;
+      }),
+    signIn: publicProcedure
+      .input(z.object({
+        // `.trim()` antes de validar: un correo pegado con espacios es habitual y
+        // seria rechazado como invalido pese a que auth.ts lo normaliza despues.
+        email: z.string().trim().email("Correo invalido").max(320),
+        password: z.string().min(1, "La contrasena es obligatoria").max(200),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // El limite de intentos combina IP y correo para que un atacante no agote
+        // la cuenta de un tercero solo repitiendo su correo desde otra red.
+        const rateLimitKey = `${ctx.req.ip ?? "sin-ip"}:${input.email.trim().toLowerCase()}`;
+        const { user } = await toTrpc(() => signIn({ ...input, rateLimitKey }));
+        await issueSession(ctx, user.openId, user.sessionVersion);
+        return { user: toPublicUser(user) } as const;
+      }),
+    changePassword: protectedProcedure
+      .input(z.object({
+        currentPassword: z.string().min(1).max(200),
+        newPassword: z.string().min(MIN_PASSWORD_LENGTH, `Minimo ${MIN_PASSWORD_LENGTH} caracteres`).max(200),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        await toTrpc(() => changePassword({ userId: ctx.user.id, ...input }));
+        // La sesion actual acaba de quedar invalidada por el nuevo sessionVersion.
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+        return { success: true } as const;
+      }),
   }),
   access: router({
     me: protectedProcedure.query(async ({ ctx }) => {

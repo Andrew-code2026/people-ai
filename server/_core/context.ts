@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
+import { authenticateRequest } from "../auth";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -11,14 +11,15 @@ export type TrpcContext = {
 export async function createContext(
   opts: CreateExpressContextOptions
 ): Promise<TrpcContext> {
-  let user: User | null = null;
-
-  try {
-    user = await sdk.authenticateRequest(opts.req);
-  } catch (error) {
-    // Authentication is optional for public procedures.
-    user = null;
-  }
+  // `authenticateRequest` devuelve null cuando no hay sesion valida; la autenticacion
+  // es opcional porque las procedures publicas tambien pasan por aqui.
+  //
+  // Limitacion conocida, heredada de `getUserByOpenId`: si la base de datos no
+  // responde, la busqueda devuelve undefined y el usuario queda como no autenticado
+  // en vez de propagarse como error de infraestructura. Se conserva ese
+  // comportamiento a proposito -- propagarlo haria que toda peticion, incluida la
+  // pantalla de login, respondiera 500 durante una caida.
+  const user = await authenticateRequest(opts.req);
 
   return {
     req: opts.req,

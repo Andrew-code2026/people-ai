@@ -20,12 +20,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { Bell, Bot, Building2, FileText, LayoutDashboard, LogOut, PanelLeft, Settings2, UserPlus, Users, WalletCards } from "lucide-react";
 import type { RoleKey } from "../../../drizzle/schema";
 import { CSSProperties, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -57,21 +56,6 @@ export default function DashboardLayout({
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
   const { loading, user } = useAuth();
-  const utils = trpc.useUtils();
-  const devLogin = trpc.auth.devLogin.useMutation({
-    onSuccess: async () => {
-      await utils.auth.me.invalidate();
-      await utils.access.me.invalidate();
-    },
-  });
-
-  const handleLogin = async () => {
-    try {
-      await devLogin.mutateAsync();
-    } catch {
-      startLogin();
-    }
-  };
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -82,31 +66,8 @@ export default function DashboardLayout({
   }
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-slate-50">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-100">
-          <div className="flex flex-col items-center gap-3 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
-              <Building2 className="h-6 w-6" />
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-              PEOPLE AI
-            </h1>
-            <p className="text-sm text-slate-500">
-              Inicia sesión para acceder al centro de gestión de Talento Humano.
-            </p>
-          </div>
-          <Button
-            onClick={handleLogin}
-            disabled={devLogin.isPending}
-            size="lg"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-md transition-all py-6 rounded-xl"
-          >
-            {devLogin.isPending ? "Iniciando sesión..." : "Iniciar sesión (Alexa Torres · HR)"}
-          </Button>
-        </div>
-      </div>
-    );
+    // La pantalla de login vive en /login; este layout solo redirige.
+    return <Redirect to="/login" />;
   }
 
   return (
@@ -137,7 +98,12 @@ function DashboardLayoutContent({
 }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const role = roleOverride ?? ((user?.role === "admin" ? "SUPER_ADMIN" : "COMPANY_ADMIN") as RoleKey);
+  // El rol funcional vive en app_profiles, no en users.role (que solo distingue
+  // 'user' de 'admin'). Derivarlo de users.role mostraba el menu de COMPANY_ADMIN
+  // a todo el mundo, incluidos los perfiles de HR.
+  const accessQuery = trpc.access.me.useQuery(undefined, { retry: false });
+  // Ante duda, el menu mas restrictivo: nunca insinuar accesos que el servidor negara.
+  const role = roleOverride ?? accessQuery.data?.role ?? "EMPLOYEE";
   const menuItems = menuItemsByRole[role];
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
@@ -221,7 +187,7 @@ function DashboardLayoutContent({
               {menuItems.map(item => {
                 const isActive = location === item.path;
                 return (
-                  <SidebarMenuItem key={item.path}>
+                  <SidebarMenuItem key={`${item.path}-${item.label}`}>
                     <SidebarMenuButton
                       isActive={isActive}
                       onClick={() => setLocation(item.path)}

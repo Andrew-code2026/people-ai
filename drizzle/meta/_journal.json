@@ -50,6 +50,13 @@
       "when": 1788217856462,
       "tag": "0006_pale_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1788475460587,
+      "tag": "0007_premium_zuras",
+      "breakpoints": true
     }
   ]
 }
