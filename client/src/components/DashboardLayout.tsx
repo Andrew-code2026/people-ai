@@ -5,6 +5,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -21,7 +23,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useIsMobile } from "@/hooks/useMobile";
-import { Bell, Bot, Building2, FileText, LayoutDashboard, LogOut, PanelLeft, Settings2, UserPlus, Users, WalletCards } from "lucide-react";
+import { Bell, Bot, Building2, Check, FileText, LayoutDashboard, LogOut, PanelLeft, Settings2, UserPlus, Users, WalletCards } from "lucide-react";
 import type { RoleKey } from "../../../drizzle/schema";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { Redirect, useLocation } from "wouter";
@@ -29,11 +31,12 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 const menuItemsByRole: Record<RoleKey, Array<{ icon: typeof LayoutDashboard; label: string; path: string }>> = {
   SUPER_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/platform" }, { icon: Building2, label: "Empresas", path: "/platform" }, { icon: Users, label: "Usuarios", path: "/platform" }],
-  COMPANY_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/company" }, { icon: Building2, label: "Empresa", path: "/company" }, { icon: Users, label: "Usuarios", path: "/company" }],
-  HR: [{ icon: LayoutDashboard, label: "Inicio", path: "/hr" }, { icon: UserPlus, label: "Contrataciones", path: "/hr/contrataciones" }, { icon: FileText, label: "Cargos y plantillas", path: "/hr/positions" }, { icon: Bot, label: "HR Assistant", path: "/hr/assistant" }, { icon: FileText, label: "Base de conocimiento", path: "/hr/knowledge" }, { icon: Bell, label: "Notificaciones", path: "/hr/notifications" }, { icon: Settings2, label: "Configuración", path: "/hr/settings" }],
+  COMPANY_ADMIN: [{ icon: LayoutDashboard, label: "Resumen", path: "/company" }, { icon: Building2, label: "Empresa", path: "/company" }, { icon: Users, label: "Usuarios", path: "/company/usuarios" }],
+  HR: [{ icon: LayoutDashboard, label: "Inicio", path: "/hr" }, { icon: UserPlus, label: "Contrataciones", path: "/hr/contrataciones" }, { icon: FileText, label: "Cargos y plantillas", path: "/hr/positions" }, { icon: Bot, label: "HR Assistant", path: "/hr/assistant" }, { icon: FileText, label: "Base de conocimiento", path: "/hr/knowledge" }, { icon: Bell, label: "Notificaciones", path: "/hr/notifications" }, { icon: Users, label: "Usuarios", path: "/company/usuarios" }, { icon: Settings2, label: "Configuración", path: "/hr/settings" }],
   FINANCE: [{ icon: LayoutDashboard, label: "Dashboard", path: "/finance" }, { icon: WalletCards, label: "Costos", path: "/finance" }, { icon: FileText, label: "Reportes", path: "/finance" }],
   MANAGER: [{ icon: LayoutDashboard, label: "Dashboard", path: "/manager" }, { icon: Users, label: "Mi equipo", path: "/manager" }, { icon: FileText, label: "Solicitudes", path: "/manager" }],
   EMPLOYEE: [{ icon: LayoutDashboard, label: "Inicio", path: "/employee" }, { icon: Users, label: "Mi perfil", path: "/employee" }, { icon: FileText, label: "Mis solicitudes", path: "/employee" }],
@@ -102,6 +105,24 @@ function DashboardLayoutContent({
   // 'user' de 'admin'). Derivarlo de users.role mostraba el menu de COMPANY_ADMIN
   // a todo el mundo, incluidos los perfiles de HR.
   const accessQuery = trpc.access.me.useQuery(undefined, { retry: false });
+  const memberships = accessQuery.data?.memberships ?? [];
+  const utils = trpc.useUtils();
+  const setActive = trpc.company.setActive.useMutation({
+    onSuccess: async () => {
+      // El orden importa. Invalidar primero relanzaba todas las consultas montadas
+      // con el companyId ANTERIOR todavia en su clave; el servidor ya habia
+      // cambiado de empresa, asi que respondia FORBIDDEN a cada una y, con los 3
+      // reintentos por defecto de React Query, la navegacion se quedaba esperando
+      // varios segundos sobre una pagina llena de errores.
+      const fresh = await utils.access.me.fetch();
+      setLocation(fresh.dashboard);
+      // Ya en la ruta nueva: se descartan los datos de la empresa anterior sin
+      // relanzarlos, y cada pagina pide los suyos al montarse.
+      await utils.invalidate(undefined, { refetchType: "none" });
+      toast.success("Empresa cambiada");
+    },
+    onError: error => toast.error(error.message),
+  });
   // Ante duda, el menu mas restrictivo: nunca insinuar accesos que el servidor negara.
   const role = roleOverride ?? accessQuery.data?.role ?? "EMPLOYEE";
   const menuItems = menuItemsByRole[role];
@@ -239,7 +260,31 @@ function DashboardLayoutContent({
                   </div>
                 </button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuContent align="end" className="w-56">
+                {memberships.length > 1 && (
+                  <>
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                      Cambiar de empresa
+                    </DropdownMenuLabel>
+                    {memberships.map(membership => (
+                      <DropdownMenuItem
+                        key={membership.companyId}
+                        disabled={membership.companyId === accessQuery.data?.companyId || setActive.isPending}
+                        // No nulo: listMemberships hace innerJoin con companies,
+                        // que descarta los perfiles sin empresa.
+                        onClick={() => setActive.mutate({ companyId: membership.companyId! })}
+                        className="cursor-pointer"
+                      >
+                        <Building2 className="mr-2 h-4 w-4" />
+                        <span className="truncate">{membership.companyName}</span>
+                        {membership.companyId === accessQuery.data?.companyId && (
+                          <Check className="ml-auto h-4 w-4 text-blue-600" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem
                   onClick={logout}
                   className="cursor-pointer text-destructive focus:text-destructive"

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("./db", async () => { const actual = await vi.importActual<typeof import("./db")>("./db"); return { ...actual, getAppProfile: vi.fn(async (userId: number) => userId === 2 ? { role: "EMPLOYEE", companyId: 4 } : { role: "HR", companyId: 4 }) }; });
+vi.mock("./db", async () => { const actual = await vi.importActual<typeof import("./db")>("./db"); return { ...actual, getAppProfile: vi.fn(async (userId: number, companyId?: number | null) => { const perfil = userId === 2 ? { role: "EMPLOYEE", companyId: 4 } : { role: "HR", companyId: 4 }; return companyId == null || companyId === perfil.companyId ? perfil : undefined; }) }; });
 import { appRouter } from "./routers";
 import { getMissingRequirements, isLinkUsable } from "./hrDomain";
 import { assertCompanyScope, assertRole } from "./authorization";

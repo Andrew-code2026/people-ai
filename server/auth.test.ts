@@ -239,6 +239,7 @@ describe("toPublicUser", () => {
     const publico = toPublicUser(user as never);
     expect(publico).not.toHaveProperty("passwordHash");
     expect(publico).not.toHaveProperty("sessionVersion");
+    expect(publico).not.toHaveProperty("activeCompanyId");
     // Lo que el cliente si necesita sigue estando.
     expect(publico).toMatchObject({ openId: user.openId, email: user.email });
     expect(JSON.stringify(publico)).not.toContain("$argon2id$");

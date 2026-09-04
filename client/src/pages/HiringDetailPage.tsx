@@ -28,6 +28,7 @@ import {
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import CopyableLink from "@/components/CopyableLink";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -829,22 +830,7 @@ export default function HiringDetailPage() {
                   )}
                 </div>
                 {link && (
-                  <div className="flex gap-2">
-                    <input
-                      readOnly
-                      value={link}
-                      className="min-w-0 flex-1 rounded-lg border bg-slate-50 px-3 text-xs"
-                    />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      onClick={() =>
-                        navigator.clipboard.writeText(link).then(() => toast.success("Enlace copiado"))
-                      }
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  <CopyableLink value={link} />
                 )}
               </CardContent>
             </Card>

@@ -33,7 +33,9 @@ export type AuthErrorCode =
   | "EMAIL_TAKEN"
   | "COMPANY_TAKEN"
   | "RATE_LIMITED"
-  | "WEAK_PASSWORD";
+  | "WEAK_PASSWORD"
+  | "NO_PASSWORD_SET"
+  | "NOT_A_MEMBER";
 
 /** Error de dominio. `routers.ts` lo traduce a TRPCError; este modulo no conoce tRPC. */
 export class AuthError extends Error {
@@ -49,12 +51,18 @@ export class AuthError extends Error {
 /** Proyeccion segura para enviar al navegador.
  *
  *  `ctx.user` es la fila completa de `users` porque el servidor necesita `id`,
- *  `role` y `sessionVersion`. Nada de eso debe cruzar la red: `passwordHash` es un
- *  secreto y `sessionVersion` es maquinaria interna de revocacion. */
-export type PublicUser = Omit<User, "passwordHash" | "sessionVersion">;
+ *  `role`, `sessionVersion` y `activeCompanyId`. Nada de eso debe cruzar la red:
+ *  `passwordHash` es un secreto, y `sessionVersion` y `activeCompanyId` son
+ *  maquinaria interna. La empresa del usuario viaja por `access.me`. */
+export type PublicUser = Omit<User, "passwordHash" | "sessionVersion" | "activeCompanyId">;
 
 export function toPublicUser(user: User): PublicUser {
-  const { passwordHash: _passwordHash, sessionVersion: _sessionVersion, ...safe } = user;
+  const {
+    passwordHash: _passwordHash,
+    sessionVersion: _sessionVersion,
+    activeCompanyId: _activeCompanyId,
+    ...safe
+  } = user;
   return safe;
 }
 
@@ -189,6 +197,15 @@ function purgeExpiredAttempts(now: number): void {
   });
 }
 
+/** Clave del limitador de intentos de contrasena.
+ *
+ *  Compartida por signIn y por la aceptacion de invitaciones: si cada uno usara la
+ *  suya, los contadores serian cubos distintos y sumarian intentos contra la misma
+ *  cuenta en vez de compartirlos. */
+export function passwordAttemptKey(ip: string | undefined, email: string): string {
+  return `${ip ?? "sin-ip"}:${normalizeEmail(email)}`;
+}
+
 export function assertNotRateLimited(key: string): void {
   const now = Date.now();
   purgeExpiredAttempts(now);
@@ -223,11 +240,17 @@ export function resetRateLimiterForTests(): void {
 
 // ------------------------------------------------------------------ flujos
 
-function normalizeEmail(email: string): string {
+/** Politica de identidad del correo. Exportada porque las invitaciones deben
+ *  normalizar exactamente igual: si aqui se anadiera una regla (NFKC, quitar
+ *  sub-direcciones con +) y alli no, una invitacion dejaria de resolver a la cuenta
+ *  que encuentra signIn. */
+export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function isDuplicateKeyError(error: unknown, index: string): boolean {
+/** Detecta colisiones de indice unico. Comprueba el codigo del driver ademas del
+ *  mensaje, y acota por indice para no confundir dos colisiones distintas. */
+export function isDuplicateKeyError(error: unknown, index: string): boolean {
   const code = (error as { code?: string })?.code;
   const message = (error as { message?: string })?.message ?? "";
   return (code === "ER_DUP_ENTRY" || /duplicate entry/i.test(message)) && message.includes(index);
@@ -288,6 +311,10 @@ export async function signUp(input: SignUpInput): Promise<{ user: User; companyI
         role: "COMPANY_ADMIN",
         status: "active",
       });
+
+      // La empresa recien creada queda como activa, para que `resolveAccess` no
+      // tenga que adivinarla cuando el usuario pertenezca a varias.
+      await tx.update(users).set({ activeCompanyId: companyId }).where(eq(users.id, userId));
 
       const created = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!created) throw new Error("No se pudo leer el usuario recien creado");

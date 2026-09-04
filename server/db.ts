@@ -1,7 +1,15 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import { getDbSsl } from "./dbSsl";
-import { appProfiles, companies, departments, employees, knowledgeBaseDocuments, recruitmentCandidates, users } from "../drizzle/schema";
+import {
+  appProfiles,
+  companies,
+  departments,
+  employees,
+  knowledgeBaseDocuments,
+  recruitmentCandidates,
+  users,
+} from "../drizzle/schema";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 let _migrated = false;
@@ -11,13 +19,17 @@ async function ensureSchema(db: ReturnType<typeof drizzle>) {
   _migrated = true;
   try {
     try {
-      await db.execute(sql`ALTER TABLE \`job_positions\` ADD COLUMN \`templateId\` INT NULL;`);
+      await db.execute(
+        sql`ALTER TABLE \`job_positions\` ADD COLUMN \`templateId\` INT NULL;`
+      );
     } catch {
       // Column might already exist
     }
 
     try {
-      await db.execute(sql`ALTER TABLE \`document_templates\` MODIFY COLUMN \`positionId\` INT NULL;`);
+      await db.execute(
+        sql`ALTER TABLE \`document_templates\` MODIFY COLUMN \`positionId\` INT NULL;`
+      );
     } catch {
       // positionId modify
     }
@@ -88,7 +100,11 @@ export async function requireDb() {
 
 export async function getUserByEmail(email: string) {
   const db = await requireDb();
-  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
   return result[0];
 }
 
@@ -101,16 +117,28 @@ export async function getUserById(id: number) {
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  const result = await db
+    .select()
+    .from(users)
+    .where(eq(users.openId, openId))
+    .limit(1);
   return result[0];
 }
 
 export async function getAppProfile(userId: number, companyId?: number | null) {
   const db = await getDb();
   if (!db) return undefined;
-  const conditions = companyId == null
-    ? eq(appProfiles.userId, userId)
-    : and(eq(appProfiles.userId, userId), eq(appProfiles.companyId, companyId));
+  // Solo perfiles activos. Sin este filtro, suspender a alguien en app_profiles no
+  // le quitaba ningun acceso: `resolveAccess` deriva de aqui el rol y la empresa en
+  // cada peticion, y devolvia el perfil suspendido igual que cualquier otro.
+  const conditions =
+    companyId == null
+      ? and(eq(appProfiles.userId, userId), eq(appProfiles.status, "active"))
+      : and(
+          eq(appProfiles.userId, userId),
+          eq(appProfiles.companyId, companyId),
+          eq(appProfiles.status, "active")
+        );
   // Orden explicito: sin el, un usuario con perfil en varias empresas obtendria
   // una al azar segun el plan de ejecucion.
   const result = await db
@@ -122,6 +150,30 @@ export async function getAppProfile(userId: number, companyId?: number | null) {
   return result[0];
 }
 
+/** Empresas a las que pertenece el usuario, con el rol en cada una. Alimenta el
+ *  selector de empresa y solo se consulta desde `access.me`. */
+export async function listMemberships(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return (
+    db
+      .select({
+        companyId: appProfiles.companyId,
+        companyName: companies.name,
+        role: appProfiles.role,
+        status: appProfiles.status,
+      })
+      .from(appProfiles)
+      .innerJoin(companies, eq(appProfiles.companyId, companies.id))
+      // Solo perfiles activos: uno suspendido no debe poder recuperar su rol
+      // anterior con un clic en el selector de empresa.
+      .where(
+        and(eq(appProfiles.userId, userId), eq(appProfiles.status, "active"))
+      )
+      .orderBy(asc(companies.name))
+  );
+}
+
 export async function listCompanies() {
   const db = await getDb();
   if (!db) return [];
@@ -131,23 +183,39 @@ export async function listCompanies() {
 export async function listDepartmentsByCompany(companyId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(departments).where(eq(departments.companyId, companyId)).orderBy(asc(departments.name));
+  return db
+    .select()
+    .from(departments)
+    .where(eq(departments.companyId, companyId))
+    .orderBy(asc(departments.name));
 }
 
 export async function listRecruitmentByCompany(companyId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(recruitmentCandidates).where(eq(recruitmentCandidates.companyId, companyId)).orderBy(asc(recruitmentCandidates.updatedAt));
+  return db
+    .select()
+    .from(recruitmentCandidates)
+    .where(eq(recruitmentCandidates.companyId, companyId))
+    .orderBy(asc(recruitmentCandidates.updatedAt));
 }
 
 export async function listKnowledgeByCompany(companyId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(knowledgeBaseDocuments).where(eq(knowledgeBaseDocuments.companyId, companyId)).orderBy(asc(knowledgeBaseDocuments.title));
+  return db
+    .select()
+    .from(knowledgeBaseDocuments)
+    .where(eq(knowledgeBaseDocuments.companyId, companyId))
+    .orderBy(asc(knowledgeBaseDocuments.title));
 }
 
 export async function listEmployeesByCompany(companyId: number) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(employees).where(eq(employees.companyId, companyId)).orderBy(asc(employees.lastName));
+  return db
+    .select()
+    .from(employees)
+    .where(eq(employees.companyId, companyId))
+    .orderBy(asc(employees.lastName));
 }

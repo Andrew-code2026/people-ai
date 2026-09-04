@@ -1,10 +1,11 @@
 import { COOKIE_NAME } from "@shared/const";
-import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, signIn, signSession, signUp, toPublicUser } from "./auth";
+import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, passwordAttemptKey, signIn, signSession, signUp, toPublicUser } from "./auth";
+import { acceptInvite, getInvitePreview, inviteUser, switchActiveCompany } from "./orgDomain";
 import type { TrpcContext } from "./_core/context";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { getDashboardForRole, assertCompanyScope, assertRole } from "./authorization";
-import { getAppProfile, listCompanies, listDepartmentsByCompany, listEmployeesByCompany, listKnowledgeByCompany, listRecruitmentByCompany } from "./db";
+import { getDashboardForRole, assertCanGrantRole, assertCompanyScope, assertRole, INVITABLE_ROLES } from "./authorization";
+import { getAppProfile, listCompanies, listMemberships, listDepartmentsByCompany, listEmployeesByCompany, listKnowledgeByCompany, listRecruitmentByCompany } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { demoHRAssistant } from "./aiDemo";
 import { analyzeHiringDocuments, askPeopleAi, availableAiModels, getHiringAiSummary, listAiConversations, listAiFindings, listAiInsights, listAiRuns, reviewAiFinding, updateAiInsight } from "./aiDomain";
@@ -15,7 +16,14 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const roleSchema = z.enum(["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"]);
 
-async function resolveAccess(user: { id: number; role: string }) {
+async function resolveAccess(user: { id: number; role: string; activeCompanyId: number | null }) {
+  // Empresa seleccionada, si la hay y el perfil sigue existiendo. Con activeCompanyId
+  // nulo -el estado de todo usuario que nunca ha cambiado de empresa- esto se salta
+  // y el comportamiento es identico al historico: el perfil mas antiguo.
+  if (user.activeCompanyId != null) {
+    const active = await getAppProfile(user.id, user.activeCompanyId);
+    if (active) return { role: active.role, companyId: active.companyId } as const;
+  }
   const profile = await getAppProfile(user.id);
   if (profile) return { role: profile.role, companyId: profile.companyId } as const;
   if (user.role === "admin") return { role: "SUPER_ADMIN" as const, companyId: null };
@@ -28,6 +36,9 @@ const AUTH_ERROR_STATUS: Record<AuthError["code"], TRPCError["code"]> = {
   COMPANY_TAKEN: "CONFLICT",
   RATE_LIMITED: "TOO_MANY_REQUESTS",
   WEAK_PASSWORD: "BAD_REQUEST",
+  NO_PASSWORD_SET: "BAD_REQUEST",
+  // No pertenecer a una empresa es un fallo de autorizacion, no de autenticacion.
+  NOT_A_MEMBER: "FORBIDDEN",
 };
 
 /** Traduce los errores de dominio de `auth.ts` a codigos tRPC. El modulo de auth
@@ -96,8 +107,26 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         // El limite de intentos combina IP y correo para que un atacante no agote
         // la cuenta de un tercero solo repitiendo su correo desde otra red.
-        const rateLimitKey = `${ctx.req.ip ?? "sin-ip"}:${input.email.trim().toLowerCase()}`;
+        const rateLimitKey = passwordAttemptKey(ctx.req.ip, input.email);
         const { user } = await toTrpc(() => signIn({ ...input, rateLimitKey }));
+        await issueSession(ctx, user.openId, user.sessionVersion);
+        return { user: toPublicUser(user) } as const;
+      }),
+    invitePreview: publicProcedure
+      .input(z.object({ token: z.string().min(20).max(200) }))
+      .query(({ input }) => toTrpc(() => getInvitePreview(input.token))),
+    acceptInvite: publicProcedure
+      .input(z.object({
+        token: z.string().min(20).max(200),
+        password: z.string().min(1).max(200),
+        // Solo se usa al crear la cuenta; si ya existe se conserva su nombre.
+        name: z.string().trim().max(160).optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        // El limitador vive dentro de acceptInvite, donde ya se conoce el correo de
+        // la invitacion: la clave debe ser la misma que la de signIn. Derivarla del
+        // token permitia reiniciar el contador con solo regenerar la invitacion.
+        const user = await toTrpc(() => acceptInvite({ ...input, ip: ctx.req.ip }));
         await issueSession(ctx, user.openId, user.sessionVersion);
         return { user: toPublicUser(user) } as const;
       }),
@@ -116,8 +145,20 @@ export const appRouter = router({
   }),
   access: router({
     me: protectedProcedure.query(async ({ ctx }) => {
-      const access = await resolveAccess(ctx.user);
-      return { ...access, dashboard: getDashboardForRole(access.role), roles: roleSchema.options };
+      // Independientes entre si: una depende de activeCompanyId y la otra solo del id.
+      const [access, memberships] = await Promise.all([
+        resolveAccess(ctx.user),
+        listMemberships(ctx.user.id),
+      ]);
+      return {
+        ...access,
+        dashboard: getDashboardForRole(access.role),
+        roles: roleSchema.options,
+        memberships,
+        // Roles que este usuario puede conceder al invitar. El selector de la
+        // interfaz se construye con esto; el servidor lo vuelve a verificar.
+        invitableRoles: INVITABLE_ROLES[access.role] ?? [],
+      };
     }),
   }),
   platform: router({
@@ -223,6 +264,24 @@ export const appRouter = router({
       assertRole(access, ["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "MANAGER"]);
       assertCompanyScope(access, input.companyId);
       return listEmployeesByCompany(input.companyId);
+    }),
+    invite: protectedProcedure.input(z.object({
+      companyId: z.number().int().positive(),
+      email: z.string().trim().email("Correo invalido").max(320),
+      role: roleSchema,
+    })).mutation(async ({ ctx, input }) => {
+      const access = await resolveAccess(ctx.user);
+      assertRole(access, ["SUPER_ADMIN", "COMPANY_ADMIN", "HR"]);
+      assertCompanyScope(access, input.companyId);
+      // Techo de rol: impide que HR se fabrique un COMPANY_ADMIN.
+      assertCanGrantRole(access, input.role);
+      return toTrpc(() => inviteUser({ ...input, invitedByUserId: ctx.user.id }));
+    }),
+    setActive: protectedProcedure.input(z.object({ companyId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      // Sin assertCompanyScope a proposito: cambiar de empresa es justamente salir
+      // del alcance actual. La pertenencia la valida switchActiveCompany.
+      await toTrpc(() => switchActiveCompany(ctx.user.id, input.companyId));
+      return { success: true } as const;
     }),
   }),
 });
