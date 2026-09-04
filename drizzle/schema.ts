@@ -19,6 +19,9 @@ export const users = mysqlTable("users", {
   passwordHash: varchar("passwordHash", { length: 255 }),
   // Se incrementa al cambiar la contrasena para invalidar las sesiones ya emitidas.
   sessionVersion: int("sessionVersion").default(0).notNull(),
+  // Empresa seleccionada cuando se pertenece a varias. Nulo = se resuelve por el
+  // perfil mas antiguo, que es el comportamiento historico.
+  activeCompanyId: int("activeCompanyId"),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -49,6 +52,27 @@ export const appProfiles = mysqlTable("app_profiles", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({ userCompanyIdx: uniqueIndex("profiles_user_company_idx").on(table.userId, table.companyId), companyIdx: index("profiles_company_idx").on(table.companyId) }));
+
+/** Invitacion para unirse a una empresa.
+ *
+ *  Tabla propia y no `app_profiles.status = 'invited'` porque `app_profiles.userId`
+ *  es NOT NULL: una invitacion pendiente no puede reservar fila antes de que el
+ *  usuario exista. Sigue la forma de `candidate_access_links`: solo se guarda el
+ *  hash del token, nunca el token. */
+export const invitations = mysqlTable("invitations", {
+  id: int("id").autoincrement().primaryKey(),
+  companyId: int("companyId").notNull(),
+  // No unico: un mismo correo puede recibir varias invitaciones a lo largo del tiempo.
+  email: varchar("email", { length: 320 }).notNull(),
+  role: mysqlEnum("role", ["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"]).notNull(),
+  tokenHash: varchar("tokenHash", { length: 128 }).notNull().unique(),
+  invitedByUserId: int("invitedByUserId").notNull(),
+  status: mysqlEnum("status", ["active", "accepted", "revoked"]).default("active").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  expiresAt: timestamp("expiresAt").notNull(),
+  acceptedAt: timestamp("acceptedAt"),
+  revokedAt: timestamp("revokedAt"),
+}, (table) => ({ companyIdx: index("invitations_company_idx").on(table.companyId), emailIdx: index("invitations_email_idx").on(table.email) }));
 
 export const departments = mysqlTable("departments", {
   id: int("id").autoincrement().primaryKey(),
@@ -293,4 +317,5 @@ export type CommunicationLog = typeof communicationLogs.$inferSelect;
 export type ProcessActivity = typeof processActivities.$inferSelect;
 export type CompanyCommunicationSettings = typeof companyCommunicationSettings.$inferSelect;
 export type InternalNotification = typeof internalNotifications.$inferSelect;
+export type Invitation = typeof invitations.$inferSelect;
 export type RoleKey = "SUPER_ADMIN" | "COMPANY_ADMIN" | "HR" | "FINANCE" | "MANAGER" | "EMPLOYEE";
