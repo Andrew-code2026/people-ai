@@ -11,6 +11,8 @@ import NotificationsPage from "@/pages/NotificationsPage";
 import RoleDashboard from "@/pages/RoleDashboard";
 import LoginPage from "@/pages/LoginPage";
 import SignUpPage from "@/pages/SignUpPage";
+import AcceptInvitePage from "@/pages/AcceptInvitePage";
+import CompanyUsersPage from "@/pages/CompanyUsersPage";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -22,6 +24,8 @@ function Router() {
     {/* Publicas */}
     <Route path="/login"><LoginPage /></Route>
     <Route path="/signup"><SignUpPage /></Route>
+    {/* La invitacion se autoriza por el token de la URL, no por sesion. */}
+    <Route path="/invitacion/:token"><AcceptInvitePage /></Route>
     {/* El portal del candidato se autoriza por el token de la URL, no por sesion. */}
     <Route path="/candidate/documents/:token"><CandidatePortalPage /></Route>
     <Route path="/demo"><Home /></Route>
@@ -30,6 +34,7 @@ function Router() {
     <Route path="/"><ProtectedRoute><HRDashboard /></ProtectedRoute></Route>
     <Route path="/platform"><ProtectedRoute><RoleDashboard expectedRole="SUPER_ADMIN" /></ProtectedRoute></Route>
     <Route path="/company"><ProtectedRoute><RoleDashboard expectedRole="COMPANY_ADMIN" /></ProtectedRoute></Route>
+    <Route path="/company/usuarios"><ProtectedRoute><CompanyUsersPage /></ProtectedRoute></Route>
     <Route path="/hr"><ProtectedRoute><HRDashboard /></ProtectedRoute></Route>
     <Route path="/hr/positions"><ProtectedRoute><PositionsPage /></ProtectedRoute></Route>
     <Route path="/hr/contrataciones"><ProtectedRoute><HiringPage /></ProtectedRoute></Route>
