@@ -49,12 +49,18 @@ export class AuthError extends Error {
 /** Proyeccion segura para enviar al navegador.
  *
  *  `ctx.user` es la fila completa de `users` porque el servidor necesita `id`,
- *  `role` y `sessionVersion`. Nada de eso debe cruzar la red: `passwordHash` es un
- *  secreto y `sessionVersion` es maquinaria interna de revocacion. */
-export type PublicUser = Omit<User, "passwordHash" | "sessionVersion">;
+ *  `role`, `sessionVersion` y `activeCompanyId`. Nada de eso debe cruzar la red:
+ *  `passwordHash` es un secreto, y `sessionVersion` y `activeCompanyId` son
+ *  maquinaria interna. La empresa del usuario viaja por `access.me`. */
+export type PublicUser = Omit<User, "passwordHash" | "sessionVersion" | "activeCompanyId">;
 
 export function toPublicUser(user: User): PublicUser {
-  const { passwordHash: _passwordHash, sessionVersion: _sessionVersion, ...safe } = user;
+  const {
+    passwordHash: _passwordHash,
+    sessionVersion: _sessionVersion,
+    activeCompanyId: _activeCompanyId,
+    ...safe
+  } = user;
   return safe;
 }
 
@@ -288,6 +294,10 @@ export async function signUp(input: SignUpInput): Promise<{ user: User; companyI
         role: "COMPANY_ADMIN",
         status: "active",
       });
+
+      // La empresa recien creada queda como activa, para que `resolveAccess` no
+      // tenga que adivinarla cuando el usuario pertenezca a varias.
+      await tx.update(users).set({ activeCompanyId: companyId }).where(eq(users.id, userId));
 
       const created = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
       if (!created) throw new Error("No se pudo leer el usuario recien creado");

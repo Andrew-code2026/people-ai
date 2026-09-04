@@ -122,6 +122,29 @@ export async function getAppProfile(userId: number, companyId?: number | null) {
   return result[0];
 }
 
+/** Empresas a las que pertenece el usuario, con el rol en cada una. Alimenta el
+ *  selector de empresa y solo se consulta desde `access.me`. */
+export async function listMemberships(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      companyId: appProfiles.companyId,
+      companyName: companies.name,
+      role: appProfiles.role,
+      status: appProfiles.status,
+    })
+    .from(appProfiles)
+    .innerJoin(companies, eq(appProfiles.companyId, companies.id))
+    .where(eq(appProfiles.userId, userId))
+    .orderBy(asc(companies.name));
+}
+
+export async function setActiveCompany(userId: number, companyId: number) {
+  const db = await requireDb();
+  await db.update(users).set({ activeCompanyId: companyId }).where(eq(users.id, userId));
+}
+
 export async function listCompanies() {
   const db = await getDb();
   if (!db) return [];
