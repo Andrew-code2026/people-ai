@@ -43,7 +43,10 @@ export function getSessionCookieOptions(
   return {
     httpOnly: true,
     path: "/",
-    sameSite: isSecure ? "none" : "lax",
+    // `lax` y no `none`: la app ya no se embebe en el iframe de Manus, y `none`
+    // permite que cualquier origen dispare peticiones autenticadas (CSRF).
+    // `lax` sigue enviando la cookie en la navegacion normal del mismo sitio.
+    sameSite: "lax",
     secure: isSecure,
   };
 }
