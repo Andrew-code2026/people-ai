@@ -1,6 +1,9 @@
-// Preconfigured storage helpers for Manus WebDev templates
-// Uploads via Forge Server presigned URL to S3 (PUT direct).
-// Downloads return /manus-storage/{key} paths served via 307 redirect.
+// Helpers de almacenamiento: subida a S3 mediante URL prefirmada de Forge (PUT directo).
+//
+// Las descargas se resuelven SIEMPRE con `storageGetSignedUrl`, tras validar rol y
+// empresa (ver `hiring.documentUrl` en routers.ts). Antes existia ademas una ruta
+// publica `/manus-storage/{key}` que prefirmaba cualquier clave sin sesion: se
+// elimino porque exponia documentos personales y ningun cliente la usaba.
 
 import { ENV } from "./_core/env";
 
@@ -32,7 +35,7 @@ export async function storagePut(
   relKey: string,
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
-): Promise<{ key: string; url: string }> {
+): Promise<{ key: string }> {
   const { forgeUrl, forgeKey } = getForgeConfig();
   const key = appendHashSuffix(normalizeKey(relKey));
 
@@ -68,12 +71,9 @@ export async function storagePut(
     throw new Error(`Storage upload to S3 failed (${uploadResp.status})`);
   }
 
-  return { key, url: `/manus-storage/${key}` };
-}
-
-export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
-  const key = normalizeKey(relKey);
-  return { key, url: `/manus-storage/${key}` };
+  // `key` es lo que persisten los llamadores (candidate_documents.fileKey). Para
+  // leer el archivo se usa `storageGetSignedUrl(key)` previa validacion de permisos.
+  return { key };
 }
 
 export async function storageGetSignedUrl(relKey: string): Promise<string> {
