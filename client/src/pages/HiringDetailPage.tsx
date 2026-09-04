@@ -1,5 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
-import { AIChatBox, type Message } from "@/components/AIChatBox";
+import { type Message } from "@/components/AIChatBox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,13 +19,19 @@ import {
   AlertTriangle,
   Check,
   RefreshCcw,
+  Sparkles,
+  Send,
+  RotateCcw,
+  Loader2,
+  User,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { Streamdown } from "streamdown";
 import {
   getHiringStatusInfo,
   getLinkStatusInfo,
@@ -40,14 +46,41 @@ const dateLabel = (value: Date | string | null | undefined) =>
       })
     : "—";
 
+const SUGGESTED_QUERIES = [
+  {
+    label: "Resumen del expediente",
+    query: "Resume el estado general, documentos entregados y pendientes de este expediente.",
+    icon: FileText,
+  },
+  {
+    label: "¿Qué documentos faltan?",
+    query: "¿Cuáles documentos obligatorios u opcionales están pendientes de cargar o verificar?",
+    icon: AlertTriangle,
+  },
+  {
+    label: "¿Hay alertas o inconsistencias?",
+    query: "¿Se detectaron inconsistencias, advertencias o requisitos que necesiten revisión humana?",
+    icon: Sparkles,
+  },
+  {
+    label: "Estado de enlace y portal",
+    query: "¿Cuál es el estado del enlace del candidato y las comunicaciones enviadas?",
+    icon: Link2,
+  },
+];
+
 function ContextualAssistant({ companyId, processId }: { companyId: number; processId: number }) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: "assistant",
-      content:
-        "Estoy limitado a este expediente. Puedo resumir sus pendientes y hallazgos, pero no tomaré decisiones ni modificaré datos.",
-    },
-  ]);
+  const initialMessage: Message = {
+    role: "assistant",
+    content:
+      "👋 Hola, soy el asistente de **PEOPLE AI**. Estoy limitado al contexto de esta contratación para responder consultas sobre requisitos, hallazgos y avances del proceso.",
+  };
+
+  const [messages, setMessages] = useState<Message[]>([initialMessage]);
+  const [input, setInput] = useState("");
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const scrollViewportRef = useRef<HTMLDivElement>(null);
+
   const ask = trpc.ai.ask.useMutation({
     onSuccess: (result) => {
       setMessages((prev) => [...prev, { role: "assistant", content: result.content }]);
@@ -55,32 +88,230 @@ function ContextualAssistant({ companyId, processId }: { companyId: number; proc
     onError: (error) => toast.error(error.message),
   });
 
+  const handleSend = (content: string) => {
+    const trimmed = content.trim();
+    if (!trimmed || ask.isPending) return;
+    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+    setInput("");
+    ask.mutate({ companyId, processId, question: content, mode: "demo" });
+  };
+
+  const handleReset = () => {
+    setMessages([initialMessage]);
+    toast.info("Conversación reiniciada");
+  };
+
+  const handleCopy = (text: string, index: number) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedIndex(index);
+      toast.success("Respuesta copiada");
+      setTimeout(() => setCopiedIndex(null), 2000);
+    });
+  };
+
+  useEffect(() => {
+    if (scrollViewportRef.current) {
+      scrollViewportRef.current.scrollTop = scrollViewportRef.current.scrollHeight;
+    }
+  }, [messages, ask.isPending]);
+
   return (
-    <Card className="border-violet-100">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <BrainCircuit className="h-4 w-4 text-violet-600" />
-          People AI · contexto de esta contratación
-        </CardTitle>
-        <p className="text-xs text-slate-500">
-          La consulta se limita al proceso seleccionado y queda auditada.
-        </p>
+    <Card className="overflow-hidden border-violet-100 shadow-sm">
+      {/* Header */}
+      <CardHeader className="border-b bg-white pb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white shadow-sm">
+              <BrainCircuit className="h-5 w-5" />
+            </div>
+            <div>
+              <CardTitle className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                People AI · contexto de esta contratación
+              </CardTitle>
+              <p className="mt-0.5 text-xs text-slate-500">
+                La consulta se limita al proceso seleccionado y queda auditada.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant="outline"
+              className="border-emerald-200 bg-emerald-50 text-[11px] font-medium text-emerald-700"
+            >
+              <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Solo lectura auditada
+            </Badge>
+            {messages.length > 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleReset}
+                disabled={ask.isPending}
+                className="h-7 text-xs text-slate-500 hover:text-slate-900"
+                title="Reiniciar conversación"
+              >
+                <RotateCcw className="mr-1 h-3 w-3" />
+                Reiniciar
+              </Button>
+            )}
+          </div>
+        </div>
       </CardHeader>
+
+      {/* Content */}
       <CardContent className="p-0">
-        <AIChatBox
-          messages={messages}
-          onSendMessage={(content: string) => {
-            setMessages((prev) => [...prev, { role: "user", content }]);
-            ask.mutate({ companyId, processId, question: content, mode: "demo" });
-          }}
-          isLoading={ask.isPending}
-          height="360px"
-          placeholder="Pregunta por pendientes o revisión…"
-          suggestedPrompts={[
-            "¿Qué documentos están pendientes?",
-            "Resume el estado de este expediente",
-          ]}
-        />
+        {/* Quick Suggestion Pills */}
+        <div className="border-b bg-slate-50/50 px-4 py-2.5">
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 mb-2 font-medium">
+            <Sparkles className="h-3.5 w-3.5 text-violet-600" />
+            <span>Consultas sugeridas para este expediente:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTED_QUERIES.map((item, idx) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => handleSend(item.query)}
+                  disabled={ask.isPending}
+                  className="group flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 shadow-2xs transition-all hover:border-violet-300 hover:bg-violet-50/70 hover:text-violet-900 disabled:opacity-50"
+                >
+                  <Icon className="h-3 w-3 text-slate-400 group-hover:text-violet-600 transition-colors" />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Message Stream */}
+        <div
+          ref={scrollViewportRef}
+          className="max-h-[360px] min-h-[180px] overflow-y-auto p-4 space-y-3.5 bg-white"
+        >
+          {messages.map((message, index) => {
+            const isAssistant = message.role === "assistant";
+            return (
+              <div
+                key={index}
+                className={cn(
+                  "flex items-start gap-3 text-xs leading-relaxed",
+                  isAssistant ? "justify-start" : "justify-end"
+                )}
+              >
+                {isAssistant && (
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 shadow-2xs">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </div>
+                )}
+
+                <div
+                  className={cn(
+                    "relative group max-w-[85%] rounded-2xl p-3.5 shadow-2xs",
+                    isAssistant
+                      ? "rounded-tl-xs border border-violet-100 bg-violet-50/50 text-slate-800"
+                      : "rounded-tr-xs bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-normal"
+                  )}
+                >
+                  {isAssistant ? (
+                    <div>
+                      <div className="prose prose-xs max-w-none text-slate-800 [&_p]:my-1 [&_ul]:my-1 [&_li]:my-0.5 [&_strong]:font-semibold [&_strong]:text-violet-950">
+                        <Streamdown>{message.content}</Streamdown>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between border-t border-violet-100/60 pt-1.5 text-[10px] text-slate-400">
+                        <span>PEOPLE AI · Contexto del proceso</span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(message.content, index)}
+                          className="flex items-center gap-1 rounded px-1.5 py-0.5 text-slate-400 hover:bg-violet-100 hover:text-slate-700 transition-colors"
+                        >
+                          {copiedIndex === index ? (
+                            <>
+                              <Check className="h-2.5 w-2.5 text-emerald-600" />
+                              <span className="text-emerald-600 font-medium">Copiado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="h-2.5 w-2.5" />
+                              <span>Copiar</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="whitespace-pre-wrap font-medium">{message.content}</p>
+                  )}
+                </div>
+
+                {!isAssistant && (
+                  <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-white shadow-2xs">
+                    <User className="h-3.5 w-3.5" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {ask.isPending && (
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700 animate-pulse">
+                <BrainCircuit className="h-3.5 w-3.5" />
+              </div>
+              <div className="rounded-2xl rounded-tl-xs border border-violet-100 bg-violet-50/50 p-3 text-xs text-violet-900 flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
+                <span>Analizando contexto y requisitos del expediente…</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input Bar */}
+        <div className="border-t bg-white p-3">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSend(input);
+            }}
+            className="flex items-center gap-2"
+          >
+            <div className="relative flex-1">
+              <input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend(input);
+                  }
+                }}
+                disabled={ask.isPending}
+                placeholder="Pregunta por pendientes, estado de documentos o requisitos de este expediente…"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-violet-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-violet-100 transition-all disabled:opacity-50"
+              />
+            </div>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={!input.trim() || ask.isPending}
+              className="h-8 rounded-xl bg-violet-600 px-3 text-xs text-white shadow-2xs hover:bg-violet-700 disabled:opacity-50 transition-all shrink-0"
+            >
+              {ask.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <>
+                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                  Preguntar
+                </>
+              )}
+            </Button>
+          </form>
+          <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-slate-400">
+            <span>Presiona <kbd className="rounded border bg-slate-100 px-1 py-0.5 text-[10px] text-slate-600">Enter ↵</kbd> para enviar</span>
+            <span>PEOPLE AI · Apoyo consultivo de talento humano</span>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -286,21 +517,77 @@ export default function HiringDetailPage() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Documentos requeridos</CardTitle>
-              <p className="text-sm text-slate-500">
-                {received}/{requirements.length} documentos recibidos · {pending} pendientes
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-xl border border-violet-100 bg-violet-50 p-4">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Documentos requeridos</CardTitle>
+                <p className="text-sm text-slate-500">
+                  {received}/{requirements.length} documentos recibidos · {pending} pendientes
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {requirements.map((req) => {
+                  const doc = documents.find((d) => d.requirementId === req.id);
+                  return (
+                    <div
+                      key={req.id}
+                      className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"
+                    >
+                      <FileText className="h-4 w-4 text-blue-600" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium">{req.title}</p>
+                        <p className="text-xs text-slate-500">
+                          {doc
+                            ? `${doc.normalizedName} · ${Math.round(doc.sizeBytes / 1024)} KB`
+                            : req.required
+                            ? "Pendiente · obligatorio"
+                            : "Pendiente · opcional"}
+                        </p>
+                      </div>
+                      {doc ? (
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setActiveDoc(doc.id)}
+                          >
+                            <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                            Abrir
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={req.status === "verified" ? "default" : "ghost"}
+                            onClick={() =>
+                              review.mutate({
+                                companyId,
+                                processId,
+                                requirementId: req.id,
+                                status: req.status === "verified" ? "uploaded" : "verified",
+                              })
+                            }
+                          >
+                            {req.status === "verified" ? "Verificado" : "Marcar verificado"}
+                          </Button>
+                        </div>
+                      ) : (
+                        <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
+                          Pendiente
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+
+            <Card className="border-violet-100">
+              <CardHeader>
                 <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                   <div>
-                    <p className="flex items-center gap-2 text-sm font-semibold text-violet-950">
+                    <CardTitle className="flex items-center gap-2 text-base text-violet-950">
                       <BrainCircuit className="h-4 w-4 text-violet-600" />
                       AI Document Intelligence
-                    </p>
+                    </CardTitle>
                     <p className="mt-1 text-xs text-violet-800">
                       Analiza metadatos de documentos, propone asociaciones y nunca reemplaza la
                       revisión humana.
@@ -318,15 +605,17 @@ export default function HiringDetailPage() {
                     {analyzeAi.isPending ? "Analizando…" : "Analizar con IA"}
                   </Button>
                 </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
                 {aiSummary.data && (
-                  <p className="mt-3 rounded-lg bg-white/70 p-3 text-xs leading-5 text-violet-950">
+                  <p className="rounded-lg bg-violet-50/70 border border-violet-100 p-3 text-xs leading-5 text-violet-950">
                     {aiSummary.data.summary}
                   </p>
                 )}
                 {aiFindings.data?.length ? (
-                  <div className="mt-3 space-y-2">
+                  <div className="space-y-2">
                     {aiFindings.data.slice(0, 6).map((finding) => (
-                      <div key={finding.id} className="rounded-lg bg-white p-3 text-xs">
+                      <div key={finding.id} className="rounded-lg border bg-white p-3 text-xs">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <span className="font-medium text-slate-900">
                             {finding.detectedType}
@@ -442,65 +731,13 @@ export default function HiringDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 text-xs text-violet-700">
+                  <p className="text-xs text-violet-700">
                     Ejecuta el análisis para generar hallazgos de esta contratación.
                   </p>
                 )}
-              </div>
-
-              {requirements.map((req) => {
-                const doc = documents.find((d) => d.requirementId === req.id);
-                return (
-                  <div
-                    key={req.id}
-                    className="flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center"
-                  >
-                    <FileText className="h-4 w-4 text-blue-600" />
-                    <div className="flex-1">
-                      <p className="text-sm font-medium">{req.title}</p>
-                      <p className="text-xs text-slate-500">
-                        {doc
-                          ? `${doc.normalizedName} · ${Math.round(doc.sizeBytes / 1024)} KB`
-                          : req.required
-                          ? "Pendiente · obligatorio"
-                          : "Pendiente · opcional"}
-                      </p>
-                    </div>
-                    {doc ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setActiveDoc(doc.id)}
-                        >
-                          <ExternalLink className="mr-1 h-3.5 w-3.5" />
-                          Abrir
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={req.status === "verified" ? "default" : "ghost"}
-                          onClick={() =>
-                            review.mutate({
-                              companyId,
-                              processId,
-                              requirementId: req.id,
-                              status: req.status === "verified" ? "uploaded" : "verified",
-                            })
-                          }
-                        >
-                          {req.status === "verified" ? "Verificado" : "Marcar verificado"}
-                        </Button>
-                      </div>
-                    ) : (
-                      <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">
-                        Pendiente
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
 
           <div className="space-y-6">
             <Card>
