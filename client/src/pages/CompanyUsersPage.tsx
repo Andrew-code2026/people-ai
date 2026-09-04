@@ -1,4 +1,5 @@
 import DashboardLayout from "@/components/DashboardLayout";
+import CopyableLink from "@/components/CopyableLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,23 +11,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useCompanyId } from "@/hooks/useCompanyId";
 import { trpc } from "@/lib/trpc";
-import { Copy, Link2, UserPlus } from "lucide-react";
+import { AlertCircle, ArrowLeft, Link2, UserPlus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ROLE_LABELS } from "../../../server/authorization";
+import { useLocation } from "wouter";
+import { getDashboardForRole, ROLE_LABELS } from "../../../server/authorization";
 import type { RoleKey } from "../../../drizzle/schema";
 
 export default function CompanyUsersPage() {
-  const { companyId, ready } = useCompanyId();
+  const [, setLocation] = useLocation();
+  // Una sola suscripcion a access.me: `useCompanyId` hace exactamente esta misma
+  // consulta, asi que usar ambos dejaba dos vistas de la misma entrada de cache y
+  // dos convenciones de carga que el lector tenia que reconciliar.
   const access = trpc.access.me.useQuery(undefined, { retry: false });
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<RoleKey | "">("");
   const [link, setLink] = useState("");
 
+  const companyId = access.data?.companyId ?? null;
   // Roles que este usuario puede conceder. El servidor lo vuelve a verificar.
   const invitableRoles = (access.data?.invitableRoles ?? []) as RoleKey[];
+  const puedeInvitar = invitableRoles.length > 0;
+  // SUPER_ADMIN no tiene empresa propia: puede conceder roles, pero no hay a que
+  // empresa invitar desde aqui. Antes el formulario se veia completo y el boton
+  // quedaba deshabilitado sin explicar por que.
+  const sinEmpresa = Boolean(access.data) && companyId === null;
 
   const invite = trpc.company.invite.useMutation({
     onSuccess: data => {
@@ -37,23 +47,31 @@ export default function CompanyUsersPage() {
     onError: error => toast.error(error.message),
   });
 
-  const copiar = () => {
-    navigator.clipboard
-      .writeText(link)
-      .then(() => toast.success("Enlace copiado"))
-      // El portapapeles falla en origenes inseguros o si el permiso esta denegado;
-      // sin este catch quedaria como promesa rechazada sin gestionar.
-      .catch(() => toast.error("No se pudo copiar. Selecciona el texto y copialo a mano."));
-  };
-
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!role) {
-      toast.error("Elige un rol para la invitacion.");
-      return;
-    }
+    if (!role || companyId === null) return;
     invite.mutate({ companyId, email: email.trim(), role });
   };
+
+  const aviso = (titulo: string, detalle: string, conBoton = true) => (
+    <Card className="border-amber-200 bg-amber-50">
+      <CardContent className="flex flex-wrap items-center justify-between gap-4 p-6 text-amber-900">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+          <div>
+            <p className="font-medium">{titulo}</p>
+            <p className="text-sm">{detalle}</p>
+          </div>
+        </div>
+        {conBoton && access.data && (
+          <Button variant="outline" onClick={() => setLocation(getDashboardForRole(access.data!.role))}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Ir a mi dashboard
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
 
   return (
     <DashboardLayout>
@@ -67,57 +85,67 @@ export default function CompanyUsersPage() {
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <UserPlus className="h-4 w-4 text-blue-600" />
-              Invitar a alguien
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Correo</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  required
-                  maxLength={320}
-                  value={email}
-                  onChange={event => setEmail(event.target.value)}
-                  placeholder="persona@empresa.com"
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="role">Rol</Label>
-                <Select value={role} onValueChange={value => setRole(value as RoleKey)}>
-                  <SelectTrigger id="role">
-                    <SelectValue placeholder="Elige un rol" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {invitableRoles.map(item => (
-                      <SelectItem key={item} value={item}>
-                        {ROLE_LABELS[item]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {access.data && invitableRoles.length === 0 && (
-                  <p className="text-xs text-amber-700">
-                    Tu rol actual no puede invitar a nadie.
-                  </p>
-                )}
-              </div>
-              <Button
-                type="submit"
-                disabled={!ready || invite.isPending || invitableRoles.length === 0}
-                className="w-fit bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                {invite.isPending ? "Creando..." : "Crear invitacion"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+        {/* Mismo criterio que RoleDashboard: si el rol no corresponde, se dice y se
+            ofrece salida, en vez de mostrar un formulario que no va a funcionar. */}
+        {access.data && !puedeInvitar &&
+          aviso("Tu rol no puede invitar usuarios", `Tu acceso actual es ${ROLE_LABELS[access.data.role]}.`)}
+
+        {sinEmpresa &&
+          puedeInvitar &&
+          aviso(
+            "No hay una empresa activa",
+            "Tu cuenta no esta asociada a una empresa concreta, asi que no hay a cual invitar desde esta pantalla.",
+            false
+          )}
+
+        {puedeInvitar && !sinEmpresa && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <UserPlus className="h-4 w-4 text-blue-600" />
+                Invitar a alguien
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="email">Correo</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    maxLength={320}
+                    value={email}
+                    onChange={event => setEmail(event.target.value)}
+                    placeholder="persona@empresa.com"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="role">Rol</Label>
+                  <Select value={role} onValueChange={value => setRole(value as RoleKey)}>
+                    <SelectTrigger id="role">
+                      <SelectValue placeholder="Elige un rol" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {invitableRoles.map(item => (
+                        <SelectItem key={item} value={item}>
+                          {ROLE_LABELS[item]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="submit"
+                  disabled={invite.isPending || !role}
+                  className="w-fit bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  {invite.isPending ? "Creando..." : "Crear invitacion"}
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        )}
 
         {link && (
           <Card className="border-blue-200 bg-blue-50/40">
@@ -132,17 +160,7 @@ export default function CompanyUsersPage() {
                 Copialo ahora: por seguridad no se vuelve a mostrar. Si lo pierdes, invita otra vez a
                 ese mismo correo y el anterior quedara anulado.
               </p>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={link}
-                  onFocus={event => event.currentTarget.select()}
-                  className="min-w-0 flex-1 rounded-lg border bg-white px-3 py-2 text-xs"
-                />
-                <Button size="icon" variant="outline" onClick={copiar} aria-label="Copiar enlace">
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </div>
+              <CopyableLink value={link} />
             </CardContent>
           </Card>
         )}

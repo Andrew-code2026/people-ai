@@ -109,12 +109,16 @@ function DashboardLayoutContent({
   const utils = trpc.useUtils();
   const setActive = trpc.company.setActive.useMutation({
     onSuccess: async () => {
-      // Todas las consultas van filtradas por empresa, asi que se invalidan todas.
-      await utils.invalidate();
-      // Y el rol puede cambiar con la empresa: quedarse en la ruta anterior
-      // dejaria al usuario en un dashboard que ya no le corresponde.
+      // El orden importa. Invalidar primero relanzaba todas las consultas montadas
+      // con el companyId ANTERIOR todavia en su clave; el servidor ya habia
+      // cambiado de empresa, asi que respondia FORBIDDEN a cada una y, con los 3
+      // reintentos por defecto de React Query, la navegacion se quedaba esperando
+      // varios segundos sobre una pagina llena de errores.
       const fresh = await utils.access.me.fetch();
       setLocation(fresh.dashboard);
+      // Ya en la ruta nueva: se descartan los datos de la empresa anterior sin
+      // relanzarlos, y cada pagina pide los suyos al montarse.
+      await utils.invalidate(undefined, { refetchType: "none" });
       toast.success("Empresa cambiada");
     },
     onError: error => toast.error(error.message),
@@ -266,6 +270,8 @@ function DashboardLayoutContent({
                       <DropdownMenuItem
                         key={membership.companyId}
                         disabled={membership.companyId === accessQuery.data?.companyId || setActive.isPending}
+                        // No nulo: listMemberships hace innerJoin con companies,
+                        // que descarta los perfiles sin empresa.
                         onClick={() => setActive.mutate({ companyId: membership.companyId! })}
                         className="cursor-pointer"
                       >

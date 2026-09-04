@@ -33,7 +33,9 @@ export type AuthErrorCode =
   | "EMAIL_TAKEN"
   | "COMPANY_TAKEN"
   | "RATE_LIMITED"
-  | "WEAK_PASSWORD";
+  | "WEAK_PASSWORD"
+  | "NO_PASSWORD_SET"
+  | "NOT_A_MEMBER";
 
 /** Error de dominio. `routers.ts` lo traduce a TRPCError; este modulo no conoce tRPC. */
 export class AuthError extends Error {
@@ -229,7 +231,11 @@ export function resetRateLimiterForTests(): void {
 
 // ------------------------------------------------------------------ flujos
 
-function normalizeEmail(email: string): string {
+/** Politica de identidad del correo. Exportada porque las invitaciones deben
+ *  normalizar exactamente igual: si aqui se anadiera una regla (NFKC, quitar
+ *  sub-direcciones con +) y alli no, una invitacion dejaria de resolver a la cuenta
+ *  que encuentra signIn. */
+export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 

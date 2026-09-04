@@ -16,14 +16,22 @@ export async function writeAudit(entry: {
   module: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  const db = await getDb();
-  if (!db) return;
-  await db.insert(auditLogs).values({
-    companyId: entry.companyId,
-    userId: entry.userId ?? null,
-    action: entry.action,
-    module: entry.module,
-    result: "success",
-    metadata: JSON.stringify(entry.metadata ?? {}),
-  });
+  try {
+    const db = await getDb();
+    if (!db) return;
+    await db.insert(auditLogs).values({
+      companyId: entry.companyId,
+      userId: entry.userId ?? null,
+      action: entry.action,
+      module: entry.module,
+      result: "success",
+      metadata: JSON.stringify(entry.metadata ?? {}),
+    });
+  } catch (error) {
+    // `getDb()` solo devuelve null si falta DATABASE_URL o fallo la conexion
+    // inicial; un error en el propio insert si se propagaba. Y propagarlo aqui es
+    // grave: acceptInvite ya ha confirmado la transaccion, asi que la invitacion
+    // queda consumida y el usuario se queda sin sesion y sin poder reintentar.
+    console.error("[Audit] No se pudo registrar:", entry.action, error);
+  }
 }

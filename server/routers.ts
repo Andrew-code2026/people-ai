@@ -1,11 +1,11 @@
 import { COOKIE_NAME } from "@shared/const";
-import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, assertNotRateLimited, changePassword, clearAttempts, recordFailedAttempt, signIn, signSession, signUp, toPublicUser } from "./auth";
+import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, signIn, signSession, signUp, toPublicUser } from "./auth";
 import { acceptInvite, getInvitePreview, inviteUser, switchActiveCompany } from "./orgDomain";
 import type { TrpcContext } from "./_core/context";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getDashboardForRole, assertCanGrantRole, assertCompanyScope, assertRole, INVITABLE_ROLES } from "./authorization";
-import { getAppProfile, listCompanies, listMemberships, setActiveCompany, listDepartmentsByCompany, listEmployeesByCompany, listKnowledgeByCompany, listRecruitmentByCompany } from "./db";
+import { getAppProfile, listCompanies, listMemberships, listDepartmentsByCompany, listEmployeesByCompany, listKnowledgeByCompany, listRecruitmentByCompany } from "./db";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { demoHRAssistant } from "./aiDemo";
 import { analyzeHiringDocuments, askPeopleAi, availableAiModels, getHiringAiSummary, listAiConversations, listAiFindings, listAiInsights, listAiRuns, reviewAiFinding, updateAiInsight } from "./aiDomain";
@@ -16,7 +16,7 @@ import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
 const roleSchema = z.enum(["SUPER_ADMIN", "COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"]);
 
-async function resolveAccess(user: { id: number; role: string; activeCompanyId?: number | null }) {
+async function resolveAccess(user: { id: number; role: string; activeCompanyId: number | null }) {
   // Empresa seleccionada, si la hay y el perfil sigue existiendo. Con activeCompanyId
   // nulo -el estado de todo usuario que nunca ha cambiado de empresa- esto se salta
   // y el comportamiento es identico al historico: el perfil mas antiguo.
@@ -36,6 +36,9 @@ const AUTH_ERROR_STATUS: Record<AuthError["code"], TRPCError["code"]> = {
   COMPANY_TAKEN: "CONFLICT",
   RATE_LIMITED: "TOO_MANY_REQUESTS",
   WEAK_PASSWORD: "BAD_REQUEST",
+  NO_PASSWORD_SET: "BAD_REQUEST",
+  // No pertenecer a una empresa es un fallo de autorizacion, no de autenticacion.
+  NOT_A_MEMBER: "FORBIDDEN",
 };
 
 /** Traduce los errores de dominio de `auth.ts` a codigos tRPC. El modulo de auth
@@ -116,22 +119,16 @@ export const appRouter = router({
       .input(z.object({
         token: z.string().min(20).max(200),
         password: z.string().min(1).max(200),
+        // Solo se usa al crear la cuenta; si ya existe se conserva su nombre.
+        name: z.string().trim().max(160).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        // Para una cuenta que ya existe, aceptar verifica su contrasena actual. Sin
-        // este limite el endpoint seria un oraculo para probar contrasenas
-        // esquivando el de signIn.
-        const rateLimitKey = `${ctx.req.ip ?? "sin-ip"}:invite:${input.token.slice(0, 12)}`;
-        assertNotRateLimited(rateLimitKey);
-        try {
-          const user = await toTrpc(() => acceptInvite(input));
-          clearAttempts(rateLimitKey);
-          await issueSession(ctx, user.openId, user.sessionVersion);
-          return { user: toPublicUser(user) } as const;
-        } catch (error) {
-          recordFailedAttempt(rateLimitKey);
-          throw error;
-        }
+        // El limitador vive dentro de acceptInvite, donde ya se conoce el correo de
+        // la invitacion: la clave debe ser la misma que la de signIn. Derivarla del
+        // token permitia reiniciar el contador con solo regenerar la invitacion.
+        const user = await toTrpc(() => acceptInvite({ ...input, ip: ctx.req.ip }));
+        await issueSession(ctx, user.openId, user.sessionVersion);
+        return { user: toPublicUser(user) } as const;
       }),
     changePassword: protectedProcedure
       .input(z.object({
@@ -148,8 +145,11 @@ export const appRouter = router({
   }),
   access: router({
     me: protectedProcedure.query(async ({ ctx }) => {
-      const access = await resolveAccess(ctx.user);
-      const memberships = await listMemberships(ctx.user.id);
+      // Independientes entre si: una depende de activeCompanyId y la otra solo del id.
+      const [access, memberships] = await Promise.all([
+        resolveAccess(ctx.user),
+        listMemberships(ctx.user.id),
+      ]);
       return {
         ...access,
         dashboard: getDashboardForRole(access.role),
