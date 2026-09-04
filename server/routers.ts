@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, signIn, signSession, signUp, toPublicUser } from "./auth";
+import { AuthError, MIN_PASSWORD_LENGTH, SESSION_TTL_MS, changePassword, passwordAttemptKey, signIn, signSession, signUp, toPublicUser } from "./auth";
 import { acceptInvite, getInvitePreview, inviteUser, switchActiveCompany } from "./orgDomain";
 import type { TrpcContext } from "./_core/context";
 import { TRPCError } from "@trpc/server";
@@ -107,7 +107,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         // El limite de intentos combina IP y correo para que un atacante no agote
         // la cuenta de un tercero solo repitiendo su correo desde otra red.
-        const rateLimitKey = `${ctx.req.ip ?? "sin-ip"}:${input.email.trim().toLowerCase()}`;
+        const rateLimitKey = passwordAttemptKey(ctx.req.ip, input.email);
         const { user } = await toTrpc(() => signIn({ ...input, rateLimitKey }));
         await issueSession(ctx, user.openId, user.sessionVersion);
         return { user: toPublicUser(user) } as const;

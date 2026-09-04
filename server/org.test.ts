@@ -9,6 +9,7 @@ vi.mock("./_core/env", () => ({
 }));
 
 import { assertCanGrantRole, canGrantRole, INVITABLE_ROLES } from "./authorization";
+import { isDuplicateKeyError, passwordAttemptKey } from "./auth";
 import { hashInviteToken, isInviteUsable } from "./orgDomain";
 
 // Nota sobre el alcance de estas pruebas: `inviteUser` y `acceptInvite` son
@@ -78,5 +79,63 @@ describe("vigencia de la invitacion", () => {
     const corte = new Date(1000);
     expect(isInviteUsable("active", corte, 999)).toBe(true);
     expect(isInviteUsable("active", corte, 1001)).toBe(false);
+  });
+});
+
+// Nota de alcance: el filtro `status = 'active'` de getAppProfile, listMemberships
+// y switchActiveCompany vive dentro de consultas drizzle. Afirmar sobre el texto
+// fuente de esas funciones seria teatro -pasaria con un comentario-, y un doble que
+// ignorase las clausulas WHERE probaria el doble. Ese comportamiento se verifica de
+// punta a punta contra una base real. Aqui se prueba lo que si es unitario.
+
+describe("clave del limitador de intentos", () => {
+  it("acceptInvite y signIn comparten contador para la misma cuenta", () => {
+    // La clave la construye una sola funcion, asi que los dos caminos no pueden
+    // divergir. Antes acceptInvite la derivaba del token y regenerar la invitacion
+    // reiniciaba el contador, dando intentos ilimitados.
+    expect(passwordAttemptKey("1.2.3.4", "ana@empresa.test")).toBe(
+      passwordAttemptKey("1.2.3.4", "ana@empresa.test")
+    );
+  });
+
+  it("normaliza el correo, para que mayusculas y espacios no creen otro cubo", () => {
+    expect(passwordAttemptKey("1.2.3.4", "  ANA@Empresa.TEST  ")).toBe(
+      passwordAttemptKey("1.2.3.4", "ana@empresa.test")
+    );
+  });
+
+  it("separa por IP y por cuenta", () => {
+    expect(passwordAttemptKey("1.2.3.4", "ana@x.test")).not.toBe(
+      passwordAttemptKey("5.6.7.8", "ana@x.test")
+    );
+    expect(passwordAttemptKey("1.2.3.4", "ana@x.test")).not.toBe(
+      passwordAttemptKey("1.2.3.4", "beto@x.test")
+    );
+  });
+
+  it("tolera una IP ausente sin agrupar a todos bajo undefined", () => {
+    expect(passwordAttemptKey(undefined, "ana@x.test")).toContain("sin-ip");
+  });
+});
+
+describe("colisiones de indice unico", () => {
+  const correo = { code: "ER_DUP_ENTRY", message: "Duplicate entry 'a@b.c' for key 'users.users_email_idx'" };
+  const perfil = { code: "ER_DUP_ENTRY", message: "Duplicate entry '5-1' for key 'app_profiles.profiles_user_company_idx'" };
+
+  it("distingue una colision de correo de una de perfil", () => {
+    // Sin acotar por indice, ambas se respondian con el mensaje del primer caso.
+    expect(isDuplicateKeyError(correo, "users_email_idx")).toBe(true);
+    expect(isDuplicateKeyError(correo, "profiles_user_company_idx")).toBe(false);
+    expect(isDuplicateKeyError(perfil, "profiles_user_company_idx")).toBe(true);
+    expect(isDuplicateKeyError(perfil, "users_email_idx")).toBe(false);
+  });
+
+  it("reconoce la colision por mensaje aunque falte el codigo del driver", () => {
+    expect(isDuplicateKeyError({ message: correo.message }, "users_email_idx")).toBe(true);
+  });
+
+  it("no confunde cualquier otro error con una colision", () => {
+    expect(isDuplicateKeyError(new Error("connection lost"), "users_email_idx")).toBe(false);
+    expect(isDuplicateKeyError(null, "users_email_idx")).toBe(false);
   });
 });

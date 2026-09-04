@@ -22,7 +22,9 @@ import {
   assertNotRateLimited,
   clearAttempts,
   hashPassword,
+  isDuplicateKeyError,
   normalizeEmail,
+  passwordAttemptKey,
   recordFailedAttempt,
   verifyPassword,
 } from "./auth";
@@ -57,7 +59,9 @@ export async function inviteUser(
   const email = normalizeEmail(input.email);
   const db = await requireDb();
 
-  // Si ya tiene perfil en esta empresa, invitar no aporta nada y confunde.
+  // Solo un perfil ACTIVO impide invitar. Contar tambien los suspendidos dejaba a
+  // esas personas permanentemente fuera: no hay pantalla para reactivarlas, asi que
+  // reinvitar era el unico camino de vuelta y devolvia conflicto para siempre.
   const existing = await getUserByEmail(email);
   if (existing) {
     const profile = (
@@ -67,7 +71,8 @@ export async function inviteUser(
         .where(
           and(
             eq(appProfiles.userId, existing.id),
-            eq(appProfiles.companyId, input.companyId)
+            eq(appProfiles.companyId, input.companyId),
+            eq(appProfiles.status, "active")
           )
         )
         .limit(1)
@@ -208,7 +213,7 @@ export async function acceptInvite(input: {
   // endpoint verifica contrasenas y hay que limitarlo igual que signIn, con la misma
   // clave, para que los dos contadores sean el mismo cubo.
   if (existing) {
-    const rateLimitKey = `${input.ip ?? "sin-ip"}:${invite.email}`;
+    const rateLimitKey = passwordAttemptKey(input.ip, invite.email);
     assertNotRateLimited(rateLimitKey);
 
     // Sin contrasena no hay forma de probar identidad: una cuenta heredada de OAuth
@@ -228,98 +233,103 @@ export async function acceptInvite(input: {
       );
     }
     clearAttempts(rateLimitKey);
-
-    // Relectura dentro del flujo: dos administradores pueden haber invitado a la vez
-    // al mismo correo, dejando dos invitaciones activas. Sin esto, aceptar la segunda
-    // reventaria contra profiles_user_company_idx con un error crudo de MySQL.
-    const yaMiembro = (
-      await db
-        .select()
-        .from(appProfiles)
-        .where(
-          and(
-            eq(appProfiles.userId, existing.id),
-            eq(appProfiles.companyId, invite.companyId)
-          )
-        )
-        .limit(1)
-    )[0];
-    if (yaMiembro) {
-      throw new AuthError("EMAIL_TAKEN", "Ya perteneces a esta empresa.");
-    }
   }
 
+  // El hash se calcula ANTES de la transaccion a proposito: argon2id es caro por
+  // diseno (~100 ms de CPU) y hacerlo dentro retendria una conexion del pool todo
+  // ese tiempo en cada aceptacion. Preferimos desperdiciarlo en la carrera perdida,
+  // que es rara, antes que penalizar el caso normal.
   const passwordHash = existing ? null : await hashPassword(input.password);
 
-  const user = await runAccept();
-
-  async function runAccept(): Promise<User> {
-    try {
-      return await db.transaction(async tx => {
-        // Cierre condicional: si dos pestanas aceptan a la vez, solo una avanza.
-        const closed = await tx
-          .update(invitations)
-          .set({ status: "accepted", acceptedAt: new Date() })
-          .where(
-            and(eq(invitations.id, invite.id), eq(invitations.status, "active"))
-          );
-        if (Number(closed[0].affectedRows) === 0) {
-          throw new AuthError(
-            "INVALID_CREDENTIALS",
-            "Esta invitacion ya no esta disponible."
-          );
-        }
-
-        let userId: number;
-        if (existing) {
-          userId = existing.id;
-        } else {
-          const created = await tx.insert(users).values({
-            openId: `local_${nanoid(21)}`,
-            name: input.name?.trim() || invite.email.split("@")[0],
-            email: invite.email,
-            passwordHash,
-            loginMethod: "password",
-            role: "user",
-          });
-          userId = Number(created[0].insertId);
-        }
-
-        await tx.insert(appProfiles).values({
-          userId,
-          companyId: invite.companyId,
-          role: invite.role,
-          status: "active",
-        });
-
-        // La empresa recien aceptada pasa a ser la activa; sin esto, quien ya tenia
-        // cuenta seguiria entrando a su empresa anterior y la invitacion no haria nada.
-        await tx
-          .update(users)
-          .set({ activeCompanyId: invite.companyId })
-          .where(eq(users.id, userId));
-
-        const row = (
-          await tx.select().from(users).where(eq(users.id, userId)).limit(1)
-        )[0];
-        if (!row)
-          throw new Error(
-            "No se pudo leer el usuario tras aceptar la invitacion"
-          );
-        return row;
-      });
-    } catch (error) {
-      // Dos invitaciones nuevas al mismo correo, aceptadas a la vez: la perdedora
-      // choca contra users_email_idx. Sin esto saldria un error crudo de MySQL.
-      const mensaje = (error as { message?: string })?.message ?? "";
-      if (/duplicate entry/i.test(mensaje)) {
+  let user: User;
+  try {
+    user = await db.transaction(async tx => {
+      // Cierre condicional: si dos pestanas aceptan a la vez, solo una avanza.
+      const closed = await tx
+        .update(invitations)
+        .set({ status: "accepted", acceptedAt: new Date() })
+        .where(
+          and(eq(invitations.id, invite.id), eq(invitations.status, "active"))
+        );
+      if (closed[0].affectedRows === 0) {
         throw new AuthError(
-          "EMAIL_TAKEN",
-          "Esa cuenta acaba de crearse. Inicia sesion y vuelve a abrir el enlace."
+          "INVALID_CREDENTIALS",
+          "Esta invitacion ya no esta disponible."
         );
       }
-      throw error;
+
+      let userId: number;
+      if (existing) {
+        userId = existing.id;
+
+        // Dentro de la transaccion, no antes: dos administradores pueden haber
+        // invitado a la vez al mismo correo y dejar dos invitaciones activas.
+        // Comprobarlo fuera dejaba abierta la ventana entre leer e insertar.
+        const yaMiembro = (
+          await tx
+            .select()
+            .from(appProfiles)
+            .where(
+              and(
+                eq(appProfiles.userId, userId),
+                eq(appProfiles.companyId, invite.companyId)
+              )
+            )
+            .limit(1)
+        )[0];
+        if (yaMiembro) {
+          throw new AuthError("EMAIL_TAKEN", "Ya perteneces a esta empresa.");
+        }
+      } else {
+        const created = await tx.insert(users).values({
+          openId: `local_${nanoid(21)}`,
+          name: input.name?.trim() || invite.email.split("@")[0],
+          email: invite.email,
+          passwordHash,
+          loginMethod: "password",
+          role: "user",
+        });
+        userId = Number(created[0].insertId);
+      }
+
+      await tx.insert(appProfiles).values({
+        userId,
+        companyId: invite.companyId,
+        role: invite.role,
+        status: "active",
+      });
+
+      // La empresa recien aceptada pasa a ser la activa; sin esto, quien ya tenia
+      // cuenta seguiria entrando a su empresa anterior y la invitacion no haria nada.
+      await tx
+        .update(users)
+        .set({ activeCompanyId: invite.companyId })
+        .where(eq(users.id, userId));
+
+      const row = (
+        await tx.select().from(users).where(eq(users.id, userId)).limit(1)
+      )[0];
+      if (!row) {
+        throw new Error(
+          "No se pudo leer el usuario tras aceptar la invitacion"
+        );
+      }
+      return row;
+    });
+  } catch (error) {
+    // Se acota por indice: una colision de correo y una de perfil son casos
+    // distintos y merecen mensajes distintos. Antes una regex sin acotar
+    // respondia a las dos con el texto del primero.
+    if (isDuplicateKeyError(error, "users_email_idx")) {
+      throw new AuthError(
+        "EMAIL_TAKEN",
+        "Esa cuenta acaba de crearse. Inicia sesion y vuelve a abrir el enlace."
+      );
     }
+    if (isDuplicateKeyError(error, "profiles_user_company_idx")) {
+      throw new AuthError("EMAIL_TAKEN", "Ya perteneces a esta empresa.");
+    }
+    throw error;
   }
 
   await writeAudit({

@@ -128,12 +128,16 @@ export async function getUserByOpenId(openId: string) {
 export async function getAppProfile(userId: number, companyId?: number | null) {
   const db = await getDb();
   if (!db) return undefined;
+  // Solo perfiles activos. Sin este filtro, suspender a alguien en app_profiles no
+  // le quitaba ningun acceso: `resolveAccess` deriva de aqui el rol y la empresa en
+  // cada peticion, y devolvia el perfil suspendido igual que cualquier otro.
   const conditions =
     companyId == null
-      ? eq(appProfiles.userId, userId)
+      ? and(eq(appProfiles.userId, userId), eq(appProfiles.status, "active"))
       : and(
           eq(appProfiles.userId, userId),
-          eq(appProfiles.companyId, companyId)
+          eq(appProfiles.companyId, companyId),
+          eq(appProfiles.status, "active")
         );
   // Orden explicito: sin el, un usuario con perfil en varias empresas obtendria
   // una al azar segun el plan de ejecucion.

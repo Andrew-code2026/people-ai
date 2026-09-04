@@ -197,6 +197,15 @@ function purgeExpiredAttempts(now: number): void {
   });
 }
 
+/** Clave del limitador de intentos de contrasena.
+ *
+ *  Compartida por signIn y por la aceptacion de invitaciones: si cada uno usara la
+ *  suya, los contadores serian cubos distintos y sumarian intentos contra la misma
+ *  cuenta en vez de compartirlos. */
+export function passwordAttemptKey(ip: string | undefined, email: string): string {
+  return `${ip ?? "sin-ip"}:${normalizeEmail(email)}`;
+}
+
 export function assertNotRateLimited(key: string): void {
   const now = Date.now();
   purgeExpiredAttempts(now);
@@ -239,7 +248,9 @@ export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
-function isDuplicateKeyError(error: unknown, index: string): boolean {
+/** Detecta colisiones de indice unico. Comprueba el codigo del driver ademas del
+ *  mensaje, y acota por indice para no confundir dos colisiones distintas. */
+export function isDuplicateKeyError(error: unknown, index: string): boolean {
   const code = (error as { code?: string })?.code;
   const message = (error as { message?: string })?.message ?? "";
   return (code === "ER_DUP_ENTRY" || /duplicate entry/i.test(message)) && message.includes(index);
