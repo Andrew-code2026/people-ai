@@ -19,6 +19,24 @@ export const ROLE_PERMISSIONS: Record<RoleKey, string[]> = {
   EMPLOYEE: ["self:read", "self:requests", "self:documents"],
 };
 
+/** Roles que cada rol puede conceder al invitar.
+ *
+ *  SUPER_ADMIN no aparece como valor concedible en ninguna lista, a proposito:
+ *  ese rol se otorga unicamente en base de datos. Sin este techo, quien tuviera HR
+ *  podria invitarse a si mismo como COMPANY_ADMIN y escalar privilegios. */
+export const INVITABLE_ROLES: Record<RoleKey, RoleKey[]> = {
+  SUPER_ADMIN: ["COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"],
+  COMPANY_ADMIN: ["COMPANY_ADMIN", "HR", "FINANCE", "MANAGER", "EMPLOYEE"],
+  HR: ["MANAGER", "EMPLOYEE"],
+  FINANCE: [],
+  MANAGER: [],
+  EMPLOYEE: [],
+};
+
+export function canGrantRole(role: RoleKey, requested: RoleKey) {
+  return INVITABLE_ROLES[role]?.includes(requested) ?? false;
+}
+
 export type AccessContext = { role: RoleKey; companyId: number | null };
 
 export function assertRole(context: AccessContext, allowed: RoleKey[]) {
@@ -30,6 +48,12 @@ export function assertRole(context: AccessContext, allowed: RoleKey[]) {
 export function assertCompanyScope(context: AccessContext, requestedCompanyId: number) {
   if (context.role !== "SUPER_ADMIN" && context.companyId !== requestedCompanyId) {
     throw new TRPCError({ code: "FORBIDDEN", message: "El recurso no pertenece a tu empresa." });
+  }
+}
+
+export function assertCanGrantRole(context: AccessContext, requested: RoleKey) {
+  if (!canGrantRole(context.role, requested)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: `No puedes asignar el rol ${ROLE_LABELS[requested]}.` });
   }
 }
 
