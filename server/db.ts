@@ -28,6 +28,14 @@ async function ensureSchema(db: ReturnType<typeof drizzle>) {
 
     try {
       await db.execute(
+        sql`ALTER TABLE \`hiring_processes\` ADD COLUMN \`documentDeadline\` TIMESTAMP NULL;`
+      );
+    } catch {
+      // Column might already exist
+    }
+
+    try {
+      await db.execute(
         sql`ALTER TABLE \`document_templates\` MODIFY COLUMN \`positionId\` INT NULL;`
       );
     } catch {

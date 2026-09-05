@@ -182,7 +182,7 @@ export const candidateProfiles = mysqlTable("candidate_profiles", {
 }, (table) => ({ companyIdx: index("candidates_company_idx").on(table.companyId) }));
 
 export const hiringProcesses = mysqlTable("hiring_processes", {
-  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), candidateId: int("candidateId").notNull(), positionId: int("positionId").notNull(), templateId: int("templateId").notNull(), createdByUserId: int("createdByUserId").notNull(), status: mysqlEnum("status", ["draft", "pending", "in_progress", "complete", "in_review", "finalized"]).default("pending").notNull(), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), candidateId: int("candidateId").notNull(), positionId: int("positionId").notNull(), templateId: int("templateId").notNull(), createdByUserId: int("createdByUserId").notNull(), status: mysqlEnum("status", ["draft", "pending", "in_progress", "complete", "in_review", "finalized"]).default("pending").notNull(), documentDeadline: timestamp("documentDeadline"), createdAt: timestamp("createdAt").defaultNow().notNull(), updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({ companyIdx: index("hiring_company_idx").on(table.companyId), candidateIdx: index("hiring_candidate_idx").on(table.candidateId) }));
 
 export const hiringRequirements = mysqlTable("hiring_requirements", {

@@ -30,8 +30,8 @@ export default function HiringPage() {
   const currentPosition = positions.data?.find(p => p.id === Number(positionId));
   const selectedTemplate = templates.data?.find(t => t.id === currentPosition?.templateId) || templates.data?.find(t => t.positionId === Number(positionId)) || templates.data?.[0];
   const template = trpc.templates.get.useQuery({ companyId, templateId: selectedTemplate?.id || 1 }, { enabled: ready && Boolean(selectedTemplate?.id) });
-  const [fullName, setFullName] = useState(""); const [identificationNumber, setIdentificationNumber] = useState(""); const [email, setEmail] = useState("");
-  const create = trpc.hiring.create.useMutation({ onSuccess: () => { utils.hiring.list.invalidate(); toast.success("Contratación creada con snapshot de documentos"); setFullName(""); setIdentificationNumber(""); setEmail(""); } });
+  const [fullName, setFullName] = useState(""); const [identificationNumber, setIdentificationNumber] = useState(""); const [email, setEmail] = useState(""); const [documentDeadline, setDocumentDeadline] = useState("");
+  const create = trpc.hiring.create.useMutation({ onSuccess: () => { utils.hiring.list.invalidate(); toast.success("Contratación creada con snapshot de documentos"); setFullName(""); setIdentificationNumber(""); setEmail(""); setDocumentDeadline(""); } });
   const rows = hiring.data?.filter(row => (statusFilter === "all" || row.status === statusFilter) && (positionFilter === "all" || String(row.positionId) === positionFilter)) || [];
   return (
     <DashboardLayout roleOverride="HR">
@@ -99,6 +99,16 @@ export default function HiringPage() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Fecha límite de carga de documentos</Label>
+                <Input
+                  type="date"
+                  value={documentDeadline}
+                  onChange={e => setDocumentDeadline(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="mt-2"
+                />
+              </div>
               <Button
                 disabled={!fullName || !identificationNumber || !email || !selectedTemplate || create.isPending}
                 onClick={() =>
@@ -110,6 +120,7 @@ export default function HiringPage() {
                     email,
                     positionId: Number(positionId),
                     templateId: selectedTemplate.id,
+                    documentDeadline: documentDeadline ? new Date(documentDeadline) : null,
                   })
                 }
                 className="w-full bg-blue-600 text-white"
@@ -198,9 +209,14 @@ export default function HiringPage() {
                     >
                       {statusInfo.label}
                     </Badge>
-                    <span className="text-xs text-slate-400">
-                      {new Date(process.createdAt).toLocaleDateString("es-CO")}
-                    </span>
+                    <div className="flex flex-col text-xs text-slate-400">
+                      <span>{new Date(process.createdAt).toLocaleDateString("es-CO")}</span>
+                      {process.documentDeadline && (
+                        <span className="text-[11px] text-amber-600 font-medium">
+                          Límite: {new Date(process.documentDeadline).toLocaleDateString("es-CO")}
+                        </span>
+                      )}
+                    </div>
                     <ArrowUpRight className="h-4 w-4 text-slate-400" />
                   </Link>
                 );

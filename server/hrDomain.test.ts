@@ -130,4 +130,32 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
       expect(fetchedTemplate.name).toBe(templateName);
     }
   });
+
+  it("permite registrar y actualizar la fecha límite de entrega de documentos en un proceso de contratación", async () => {
+    const { createHiring, updateHiringDeadline, createPosition, deletePosition, getMasterStandardTemplate } = await import("./hrDomain");
+    const master = await getMasterStandardTemplate(4);
+    if (!master) return;
+    const posId = await createPosition(4, `Cargo Deadline Test ${Date.now()}`, "Test desc");
+    const deadline = new Date("2026-10-01T23:59:59.000Z");
+    try {
+      const created = await createHiring(4, 1, {
+        fullName: "Candidato Con Fecha Límite",
+        identificationNumber: "1098765432",
+        email: "candidato.deadline@test.com",
+        positionId: posId,
+        templateId: master.id,
+        documentDeadline: deadline,
+      });
+      expect(created).not.toBeNull();
+      expect(created?.process.documentDeadline).toBeDefined();
+
+      const updatedDeadline = new Date("2026-10-15T23:59:59.000Z");
+      const updated = await updateHiringDeadline(4, created!.process.id, updatedDeadline, 1);
+      expect(updated).not.toBeNull();
+      expect(updated?.process.documentDeadline).toBeDefined();
+    } finally {
+      await deletePosition(4, posId);
+    }
+  });
 });
+
