@@ -1,0 +1,36 @@
+# Blueprint de Render. Con este archivo el servicio se crea desde el repositorio y
+# la configuracion viaja en git: si alguien borra una variable en el panel, vuelve
+# al redesplegar. Las marcadas `sync: false` son secretos y se introducen una sola
+# vez en el panel; no se guardan aqui.
+#
+# Sin NODE_OPTIONS a proposito: una variable de servicio aplica tambien al build,
+# donde Vite necesita margen de memoria. Si el runtime se quedara corto, el sitio
+# para un `--max-old-space-size` es `startCommand`, nunca una variable global.
+services:
+  - type: web
+    name: people-ai
+    runtime: node
+    plan: free
+    # Misma region que el cluster TiDB (us-east-1): menos latencia por consulta,
+    # que con el arranque en frio del plan gratuito se nota.
+    region: virginia
+    branch: feat/despliegue-render
+    # Sin `--prod`: el build necesita vite, esbuild y typescript. pnpm es
+    # obligatorio (patch de wouter y overrides en package.json); corepack lo
+    # instala en la version que fija `packageManager`.
+    buildCommand: corepack enable && corepack prepare pnpm@10.4.1 --activate && pnpm install --frozen-lockfile && pnpm build
+    # `node` directo y no `pnpm start`: en runtime no debe hacer falta el gestor
+    # de paquetes para nada. Es exactamente lo que hace el script `start`.
+    startCommand: node dist/index.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Cadena de conexion a TiDB Cloud (puerto 4000, TLS obligatorio).
+      - key: DATABASE_URL
+        sync: false
+      # Minimo 32 caracteres o el servidor no arranca. Generar con: openssl rand -hex 32
+      - key: JWT_SECRET
+        sync: false
+      - key: REMINDER_COOLDOWN_HOURS
+        value: "4"
