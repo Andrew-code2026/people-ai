@@ -9,7 +9,7 @@ import { getAppProfile, listCompanies, listMemberships, listDepartmentsByCompany
 import { getSessionCookieOptions } from "./_core/cookies";
 import { demoHRAssistant } from "./aiDemo";
 import { analyzeHiringDocuments, askPeopleAi, availableAiModels, getHiringAiSummary, listAiConversations, listAiFindings, listAiInsights, listAiRuns, reviewAiFinding, updateAiInsight } from "./aiDomain";
-import { assignDefaultTemplate, assignTemplateToPosition, createHiring, createPosition, createTemplate, deletePosition, deleteTemplate, generateLink, getDashboardStats, getDocumentUrl, getHiringDetail, getLinkState, getMasterStandardTemplate, getPortal, listActivities, listCommunications, listHiring, listPositions, listTemplates, listNotifications, removePortalDocument, revokeLink, prepareCandidateEmail, prepareCandidateReminder, markCommunicationSent, downloadHiringZip, listExpiringLinks, requestCandidateOtp, submitPortal, updateHiringDeadline, updateMasterStandardTemplate, updateTemplateName, verifyCandidateOtp, updateRequirement, updateTemplate, uploadPortalDocument } from "./hrDomain";
+import { assignDefaultTemplate, assignTemplateToPosition, createHiring, createPosition, createTemplate, deletePosition, deleteTemplate, generateLink, getDashboardStats, getDocumentUrl, getHiringDetail, getLinkState, getMasterStandardTemplate, getPortal, getPortalDocumentUrl, listActivities, listCommunications, listHiring, listPositions, listTemplates, listNotifications, removePortalDocument, revokeLink, prepareCandidateEmail, prepareCandidateReminder, markCommunicationSent, downloadHiringZip, listExpiringLinks, requestCandidateOtp, submitPortal, updateHiringDeadline, updateMasterStandardTemplate, updateTemplateName, verifyCandidateOtp, updateRequirement, updateTemplate, uploadPortalDocument } from "./hrDomain";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 
@@ -238,8 +238,9 @@ export const appRouter = router({
     upload: publicProcedure.input(z.object({ token: z.string().min(20).max(200), requirementId: z.number().int().positive(), originalName: z.string().min(1).max(255), mimeType: z.string(), base64: z.string().min(1) })).mutation(({ input }) => uploadPortalDocument(input.token, input.requirementId, input.originalName, input.mimeType, Buffer.from(input.base64, "base64"))),
     submit: publicProcedure.input(z.object({ token: z.string().min(20).max(200) })).mutation(({ input }) => submitPortal(input.token)),
     remove: publicProcedure.input(z.object({ token: z.string().min(20).max(200), requirementId: z.number().int().positive() })).mutation(({ input }) => removePortalDocument(input.token, input.requirementId)),
+    documentUrl: publicProcedure.input(z.object({ token: z.string().min(20).max(200), requirementId: z.number().int().positive() })).query(({ input }) => getPortalDocumentUrl(input.token, input.requirementId)),
     otpRequest: publicProcedure.input(z.object({ token: z.string().min(20).max(200) })).mutation(({ input }) => requestCandidateOtp(input.token)),
-    otpVerify: publicProcedure.input(z.object({ token: z.string().min(20).max(200), code: z.string().regex(/^\\d{6}$/) })).mutation(({ input }) => verifyCandidateOtp(input.token, input.code)),
+    otpVerify: publicProcedure.input(z.object({ token: z.string().min(20).max(200), code: z.string().regex(/^\d{6}$/) })).mutation(({ input }) => verifyCandidateOtp(input.token, input.code)),
   }),
   ai: router({
     models: protectedProcedure.query(async ({ ctx }) => { const access = await resolveAccess(ctx.user); assertRole(access, ["SUPER_ADMIN", "COMPANY_ADMIN", "HR"]); return availableAiModels(); }),
