@@ -150,7 +150,20 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
+// Los plugins de instrumentacion solo tienen sentido con el servidor de desarrollo.
+//
+// Antes se aplicaban tambien en `vite build`: `jsxLocPlugin` estampaba
+// data-loc="client/src/pages/X.tsx:NN" en cada elemento del bundle publicado, y
+// `vitePluginManusRuntime` inyectaba ~340 KB de script inline en index.html sin
+// mirar NODE_ENV. El index.html publicado pesaba 368 KB y se bajaba entero en
+// cada visita. `pnpm build` fija NODE_ENV=production; `pnpm dev` no, y conserva
+// los tres.
+const esProduccion = process.env.NODE_ENV === "production";
+const plugins = [
+  react(),
+  tailwindcss(),
+  ...(esProduccion ? [] : [jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()]),
+];
 
 export default defineConfig({
   plugins,
