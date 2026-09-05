@@ -62,7 +62,7 @@ Ejecutar `pnpm check` y `pnpm test` antes de cada checkpoint. Las pruebas esenci
 
 ## Reestructuración de demo HR
 
-La experiencia principal ahora está enfocada en una analista de Talento Humano llamada Alexa Torres y en el tenant ficticio `Empresa Demo — Talento Humano` (`companyId = 4`). La ruta `/` y `/hr` muestran el dashboard especializado; las rutas `/platform`, `/company`, `/finance`, `/manager` y `/employee` conservan los contextos internos de la arquitectura aprobada.
+La experiencia principal ahora está enfocada en una analista de Talento Humano llamada Alexa Torres y en el tenant ficticio `Empresa Demo — Talento Humano`, que `server/seed.ts` crea con el id 4. **Ese id es un detalle del seed, no un valor con el que programar.** Fijar `const companyId = 4` en una página hace que, con cuentas reales, se pidan datos de una empresa ajena y el servidor responda FORBIDDEN desde `assertCompanyScope`. La empresa activa se resuelve siempre desde el servidor, con `access.me` o el hook `client/src/hooks/useCompanyId.ts`; los commits `7cbda94` y `d7e3da5` retiraron esos literales del cliente. La ruta `/` y `/hr` muestran el dashboard especializado; las rutas `/platform`, `/company`, `/finance`, `/manager` y `/employee` conservan los contextos internos de la arquitectura aprobada.
 
 El sidebar HR presenta únicamente Inicio, Contratación, HR Assistant, Base de conocimiento, Notificaciones y Configuración. Las acciones todavía no implementadas producen feedback explícito de próxima fase. Contratación y Base de conocimiento ya tienen tablas y consultas tRPC aisladas por empresa, pero no implementan carga documental, enlaces de candidatos, OCR ni IA real.
 
