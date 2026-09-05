@@ -36,6 +36,14 @@ async function ensureSchema(db: ReturnType<typeof drizzle>) {
 
     try {
       await db.execute(
+        sql`ALTER TABLE \`hiring_requirements\` ADD COLUMN \`allowedMimeTypes\` VARCHAR(300) NULL;`
+      );
+    } catch {
+      // Column might already exist
+    }
+
+    try {
+      await db.execute(
         sql`ALTER TABLE \`document_templates\` MODIFY COLUMN \`positionId\` INT NULL;`
       );
     } catch {

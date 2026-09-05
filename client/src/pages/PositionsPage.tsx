@@ -40,11 +40,19 @@ import {
   ArrowLeft,
   Info,
   Check,
+  FileType,
 } from "lucide-react";
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import DocumentFormatSelector from "@/components/DocumentFormatSelector";
+import {
+  FILE_TYPE_PRESETS,
+  DEFAULT_ALLOWED_MIMETYPES,
+  getFileTypeBadgeInfo,
+  formatAllowedExtensions,
+} from "@shared/documentTypes";
 
 const DEFAULT_TEMPLATE_NAME = "Expediente de Ingreso Estándar";
 
@@ -54,36 +62,42 @@ const STANDARD_REFERENCE_DOCS = [
     description: "Copia legible ampliada al 150% por ambas caras en formato PDF.",
     required: true,
     legalRef: "Identificación laboral oficial (Art. 58 C.S.T.)",
+    allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp",
   },
   {
     title: "Hoja de Vida Actualizada",
     description: "Formato PDF con datos de contacto, perfil profesional y trayectoria.",
     required: true,
     legalRef: "Validación de perfil y antecedentes laborales",
+    allowedMimeTypes: "application/pdf",
   },
   {
     title: "Certificado de Afiliación EPS",
     description: "Certificación expedida con vigencia no mayor a 30 días.",
     required: true,
     legalRef: "Afiliación obligatoria al SGSSS (Ley 100 de 1993)",
+    allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp",
   },
   {
     title: "Certificado de Fondo de Pensiones",
     description: "Certificado de afiliación al fondo pensional (Colpensiones o Fondo Privado).",
     required: true,
     legalRef: "Aporte pensional obligatorio (Ley 100 de 1993)",
+    allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp",
   },
   {
     title: "Certificaciones Académicas",
     description: "Diplomas, actas de grado o certificaciones de estudio correspondientes al perfil.",
     required: false,
     legalRef: "Soporte de idoneidad y competencias del cargo",
+    allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp",
   },
   {
     title: "Examen Médico de Ingreso",
     description: "Concepto de aptitud ocupacional expedido por médico especialista en SST / IPS autorizada.",
     required: true,
     legalRef: "Resolución 2346 de 2007 (Evaluaciones Médicas Ocupacionales)",
+    allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp",
   },
 ];
 
@@ -93,6 +107,7 @@ interface TemplateItem {
   description?: string;
   required: boolean;
   sortOrder: number;
+  allowedMimeTypes?: string;
 }
 
 export default function PositionsPage() {
@@ -124,6 +139,7 @@ export default function PositionsPage() {
   const [editingMasterDocTitle, setEditingMasterDocTitle] = useState("");
   const [editingMasterDocDesc, setEditingMasterDocDesc] = useState("");
   const [editingMasterDocRequired, setEditingMasterDocRequired] = useState(true);
+  const [editingMasterDocFileType, setEditingMasterDocFileType] = useState(DEFAULT_ALLOWED_MIMETYPES);
 
   // New position form
   const [newPositionName, setNewPositionName] = useState("");
@@ -143,6 +159,7 @@ export default function PositionsPage() {
   const [editingDocTitle, setEditingDocTitle] = useState("");
   const [editingDocDesc, setEditingDocDesc] = useState("");
   const [editingDocRequired, setEditingDocRequired] = useState(true);
+  const [editingDocFileType, setEditingDocFileType] = useState(DEFAULT_ALLOWED_MIMETYPES);
 
   // Master standard template editing state
   const [masterItems, setMasterItems] = useState<TemplateItem[]>([]);
@@ -150,11 +167,13 @@ export default function PositionsPage() {
   const [newMasterDocTitle, setNewMasterDocTitle] = useState("");
   const [newMasterDocDesc, setNewMasterDocDesc] = useState("");
   const [newMasterDocRequired, setNewMasterDocRequired] = useState(true);
+  const [newMasterDocFileType, setNewMasterDocFileType] = useState(DEFAULT_ALLOWED_MIMETYPES);
 
   // Inline new document form
   const [newDocTitle, setNewDocTitle] = useState("");
   const [newDocDesc, setNewDocDesc] = useState("");
   const [newDocRequired, setNewDocRequired] = useState(true);
+  const [newDocFileType, setNewDocFileType] = useState(DEFAULT_ALLOWED_MIMETYPES);
 
   // Initialize master standard items when query loads
   useEffect(() => {
@@ -165,6 +184,7 @@ export default function PositionsPage() {
           description: item.description || undefined,
           required: item.required,
           sortOrder: item.sortOrder || idx + 1,
+          allowedMimeTypes: (item as any).allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
         }))
       );
     }
@@ -410,6 +430,7 @@ export default function PositionsPage() {
           description: doc.description || undefined,
           required: doc.required,
           sortOrder: idx + 1,
+          allowedMimeTypes: (doc as any).allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
         }))
       : [
           {
@@ -417,6 +438,7 @@ export default function PositionsPage() {
             description: "Formato PDF con datos de contacto",
             required: true,
             sortOrder: 1,
+            allowedMimeTypes: "application/pdf",
           },
         ];
 
@@ -447,12 +469,14 @@ export default function PositionsPage() {
         description: item.description || undefined,
         required: item.required,
         sortOrder: index + 1,
+        allowedMimeTypes: item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
       })),
       {
         title: newDocTitle.trim(),
         description: newDocDesc.trim() || undefined,
         required: newDocRequired,
         sortOrder: existingItems.length + 1,
+        allowedMimeTypes: newDocFileType,
       },
     ];
 
@@ -461,13 +485,19 @@ export default function PositionsPage() {
       templateId: selectedTemplateId,
       items: updatedItems,
     });
+
+    setNewDocTitle("");
+    setNewDocDesc("");
+    setNewDocRequired(true);
+    setNewDocFileType(DEFAULT_ALLOWED_MIMETYPES);
   };
 
-  const handleOpenEditDoc = (item: { id: number; title: string; description?: string | null; required: boolean }) => {
+  const handleOpenEditDoc = (item: { id: number; title: string; description?: string | null; required: boolean; allowedMimeTypes?: string | null }) => {
     setEditingDocId(item.id);
     setEditingDocTitle(item.title);
     setEditingDocDesc(item.description || "");
     setEditingDocRequired(item.required);
+    setEditingDocFileType(item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES);
     setIsEditDocOpen(true);
   };
 
@@ -482,6 +512,7 @@ export default function PositionsPage() {
           description: editingDocDesc.trim() || undefined,
           required: editingDocRequired,
           sortOrder: item.sortOrder,
+          allowedMimeTypes: editingDocFileType,
         };
       }
       return {
@@ -489,6 +520,7 @@ export default function PositionsPage() {
         description: item.description || undefined,
         required: item.required,
         sortOrder: item.sortOrder,
+        allowedMimeTypes: item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
       };
     });
 
@@ -514,6 +546,7 @@ export default function PositionsPage() {
       description: item.description || undefined,
       required: item.required,
       sortOrder: idx + 1,
+      allowedMimeTypes: item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
     }));
 
     updateTemplateMutation.mutate({
@@ -531,6 +564,7 @@ export default function PositionsPage() {
       description: item.description || undefined,
       required: item.id === itemId ? !item.required : item.required,
       sortOrder: item.sortOrder,
+      allowedMimeTypes: item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
     }));
 
     updateTemplateMutation.mutate({
@@ -550,6 +584,7 @@ export default function PositionsPage() {
         description: item.description || undefined,
         required: item.required,
         sortOrder: index + 1,
+        allowedMimeTypes: item.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
       }));
 
     updateTemplateMutation.mutate({
@@ -567,6 +602,7 @@ export default function PositionsPage() {
           description: item.description || undefined,
           required: item.required,
           sortOrder: item.sortOrder || idx + 1,
+          allowedMimeTypes: (item as any).allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES,
         }))
       );
     }
@@ -580,6 +616,7 @@ export default function PositionsPage() {
     setEditingMasterDocTitle(doc.title);
     setEditingMasterDocDesc(doc.description || "");
     setEditingMasterDocRequired(doc.required);
+    setEditingMasterDocFileType(doc.allowedMimeTypes || DEFAULT_ALLOWED_MIMETYPES);
     setIsEditMasterDocDialogOpen(true);
   };
 
@@ -594,6 +631,7 @@ export default function PositionsPage() {
               title: editingMasterDocTitle.trim(),
               description: editingMasterDocDesc.trim() || undefined,
               required: editingMasterDocRequired,
+              allowedMimeTypes: editingMasterDocFileType,
             }
           : item
       )
@@ -613,11 +651,13 @@ export default function PositionsPage() {
         description: newMasterDocDesc.trim() || undefined,
         required: newMasterDocRequired,
         sortOrder: prev.length + 1,
+        allowedMimeTypes: newMasterDocFileType,
       },
     ]);
     setNewMasterDocTitle("");
     setNewMasterDocDesc("");
     setNewMasterDocRequired(true);
+    setNewMasterDocFileType(DEFAULT_ALLOWED_MIMETYPES);
     toast.success("Documento añadido a la lista estándar");
   };
 
@@ -828,6 +868,14 @@ export default function PositionsPage() {
                       />
                     </div>
 
+                    <div>
+                      <DocumentFormatSelector
+                        value={newMasterDocFileType}
+                        onChange={setNewMasterDocFileType}
+                        label="Formato aceptado"
+                      />
+                    </div>
+
                     <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50/70 p-3">
                       <div>
                         <Label htmlFor="master-add-req" className="text-xs font-semibold text-slate-800 cursor-pointer">
@@ -953,11 +1001,25 @@ export default function PositionsPage() {
                           </div>
                         </div>
 
-                        {/* Title and Description */}
+                        {/* Title, Format Badge and Description */}
                         <div className="min-w-0 flex-1">
-                          <h4 className="text-sm font-semibold text-slate-900 leading-snug">
-                            {item.title}
-                          </h4>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="text-sm font-semibold text-slate-900 leading-snug">
+                              {item.title}
+                            </h4>
+                            {(() => {
+                              const badgeInfo = getFileTypeBadgeInfo(item.allowedMimeTypes);
+                              return (
+                                <span
+                                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium border ${badgeInfo.badgeColor}`}
+                                  title={badgeInfo.title}
+                                >
+                                  <FileText className="h-3 w-3 shrink-0" />
+                                  {badgeInfo.badgeText}
+                                </span>
+                              );
+                            })()}
+                          </div>
                           {item.description ? (
                             <p className="mt-0.5 text-xs text-slate-500 leading-relaxed">
                               {item.description}
@@ -1056,9 +1118,9 @@ export default function PositionsPage() {
 
           {/* DIALOG: Editar Documento de la Plantilla Estándar */}
           <Dialog open={isEditMasterDocDialogOpen} onOpenChange={setIsEditMasterDocDialogOpen}>
-            <DialogContent className="sm:max-w-lg">
-              <form onSubmit={handleSaveMasterDocEdit} className="w-full min-w-0">
-                <DialogHeader>
+            <DialogContent className="sm:max-w-lg max-h-[min(90vh,760px)] p-0 flex flex-col overflow-hidden">
+              <form onSubmit={handleSaveMasterDocEdit} className="w-full min-w-0 flex flex-col max-h-[min(90vh,760px)]">
+                <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
                   <DialogTitle className="text-lg font-bold">
                     Editar Documento Estándar
                   </DialogTitle>
@@ -1067,7 +1129,7 @@ export default function PositionsPage() {
                   </DialogDescription>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4 w-full min-w-0">
+                <div className="space-y-3 px-6 py-2 overflow-y-auto min-w-0 flex-1">
                   <div>
                     <Label htmlFor="edit-master-title" className="text-xs font-semibold">
                       Título del documento *
@@ -1077,7 +1139,7 @@ export default function PositionsPage() {
                       value={editingMasterDocTitle}
                       onChange={(e) => setEditingMasterDocTitle(e.target.value)}
                       placeholder="Ej. Certificado de Afiliación EPS"
-                      className="mt-1.5 text-xs"
+                      className="mt-1 text-xs h-9"
                       required
                     />
                   </div>
@@ -1091,12 +1153,17 @@ export default function PositionsPage() {
                       value={editingMasterDocDesc}
                       onChange={(e) => setEditingMasterDocDesc(e.target.value)}
                       placeholder="Instrucciones para el candidato sobre vigencia, formato o emisor..."
-                      className="mt-1.5 resize-none text-xs"
-                      rows={3}
+                      className="mt-1 resize-none text-xs min-h-[56px]"
+                      rows={2}
                     />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                  <DocumentFormatSelector
+                    value={editingMasterDocFileType}
+                    onChange={setEditingMasterDocFileType}
+                  />
+
+                  <div className="flex items-center justify-between rounded-xl border border-slate-200 p-2.5 bg-slate-50">
                     <div>
                       <Label htmlFor="edit-master-req" className="text-xs font-semibold cursor-pointer">
                         Documento Obligatorio
@@ -1115,7 +1182,7 @@ export default function PositionsPage() {
                   </div>
                 </div>
 
-                <DialogFooter className="gap-2">
+                <DialogFooter className="px-6 py-3 border-t border-slate-100 bg-slate-50/70 shrink-0 gap-2">
                   <Button
                     type="button"
                     variant="outline"
@@ -1516,8 +1583,8 @@ export default function PositionsPage() {
                       <p className="text-xs font-semibold text-slate-700 mb-2.5">
                         + Agregar documento a esta plantilla:
                       </p>
-                      <form onSubmit={handleAddDocument} className="grid gap-3 sm:grid-cols-[1.5fr_1.5fr_auto_auto]">
-                        <div>
+                      <form onSubmit={handleAddDocument} className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
                           <Input
                             placeholder="Título (ej. Certificado de Antecedentes)"
                             value={newDocTitle}
@@ -1525,8 +1592,6 @@ export default function PositionsPage() {
                             className="bg-white text-xs"
                             required
                           />
-                        </div>
-                        <div>
                           <Input
                             placeholder="Descripción / Instrucciones (opcional)"
                             value={newDocDesc}
@@ -1534,25 +1599,35 @@ export default function PositionsPage() {
                             className="bg-white text-xs"
                           />
                         </div>
-                        <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-md border border-slate-200">
-                          <Switch
-                            id="required-toggle"
-                            checked={newDocRequired}
-                            onCheckedChange={setNewDocRequired}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-0.5">
+                          <DocumentFormatSelector
+                            value={newDocFileType}
+                            onChange={setNewDocFileType}
+                            compact
+                            label="Formato aceptado"
                           />
-                          <Label htmlFor="required-toggle" className="text-xs cursor-pointer select-none">
-                            {newDocRequired ? "Obligatorio" : "Opcional"}
-                          </Label>
+                          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-md border border-slate-200">
+                              <Switch
+                                id="required-toggle"
+                                checked={newDocRequired}
+                                onCheckedChange={setNewDocRequired}
+                              />
+                              <Label htmlFor="required-toggle" className="text-xs cursor-pointer select-none">
+                                {newDocRequired ? "Obligatorio" : "Opcional"}
+                              </Label>
+                            </div>
+                            <Button
+                              type="submit"
+                              size="sm"
+                              disabled={!newDocTitle.trim() || updateTemplateMutation.isPending}
+                              className="bg-slate-900 text-white hover:bg-slate-800"
+                            >
+                              <Plus className="mr-1 h-3.5 w-3.5" />
+                              Agregar
+                            </Button>
+                          </div>
                         </div>
-                        <Button
-                          type="submit"
-                          size="sm"
-                          disabled={!newDocTitle.trim() || updateTemplateMutation.isPending}
-                          className="bg-slate-900 text-white hover:bg-slate-800"
-                        >
-                          <Plus className="mr-1 h-3.5 w-3.5" />
-                          Agregar
-                        </Button>
                       </form>
                     </div>
 
@@ -1600,10 +1675,22 @@ export default function PositionsPage() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-sm font-semibold text-slate-800">
                                   {item.title}
                                 </span>
+                                {(() => {
+                                  const badgeInfo = getFileTypeBadgeInfo(item.allowedMimeTypes);
+                                  return (
+                                    <span
+                                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-medium border ${badgeInfo.badgeColor}`}
+                                      title={badgeInfo.title}
+                                    >
+                                      <FileText className="h-3 w-3 shrink-0" />
+                                      {badgeInfo.badgeText}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                               {item.description && (
                                 <p className="mt-0.5 text-xs text-slate-500">
@@ -1672,16 +1759,16 @@ export default function PositionsPage() {
 
       {/* DIALOG: Editar Documento Individual */}
       <Dialog open={isEditDocOpen} onOpenChange={setIsEditDocOpen}>
-        <DialogContent className="sm:max-w-md">
-          <form onSubmit={handleSaveDocEdit} className="w-full min-w-0">
-            <DialogHeader>
+        <DialogContent className="sm:max-w-lg max-h-[min(90vh,760px)] p-0 flex flex-col overflow-hidden">
+          <form onSubmit={handleSaveDocEdit} className="w-full min-w-0 flex flex-col max-h-[min(90vh,760px)]">
+            <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
               <DialogTitle className="text-lg font-bold">Editar Documento</DialogTitle>
               <DialogDescription className="text-xs text-slate-500">
                 Modifica el título, las instrucciones y la obligatoriedad de este documento.
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4 w-full min-w-0">
+            <div className="space-y-3 px-6 py-2 overflow-y-auto min-w-0 flex-1">
               <div>
                 <Label htmlFor="edit-doc-title" className="text-xs font-semibold">
                   Título del documento *
@@ -1691,7 +1778,7 @@ export default function PositionsPage() {
                   value={editingDocTitle}
                   onChange={(e) => setEditingDocTitle(e.target.value)}
                   placeholder="Ej. Certificado de Antecedentes Disciplinarios"
-                  className="mt-1.5"
+                  className="mt-1 text-xs h-9"
                   required
                 />
               </div>
@@ -1705,12 +1792,17 @@ export default function PositionsPage() {
                   value={editingDocDesc}
                   onChange={(e) => setEditingDocDesc(e.target.value)}
                   placeholder="Instrucciones para el candidato sobre vigencia, formato o emisor..."
-                  className="mt-1.5 resize-none text-xs"
-                  rows={3}
+                  className="mt-1 resize-none text-xs min-h-[56px]"
+                  rows={2}
                 />
               </div>
 
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+              <DocumentFormatSelector
+                value={editingDocFileType}
+                onChange={setEditingDocFileType}
+              />
+
+              <div className="flex items-center justify-between rounded-xl border border-slate-200 p-2.5 bg-slate-50">
                 <div>
                   <Label htmlFor="edit-doc-req" className="text-xs font-semibold cursor-pointer">
                     Documento Obligatorio
@@ -1729,7 +1821,7 @@ export default function PositionsPage() {
               </div>
             </div>
 
-            <DialogFooter className="gap-2">
+            <DialogFooter className="px-6 py-3 border-t border-slate-100 bg-slate-50/70 shrink-0 gap-2">
               <Button
                 type="button"
                 variant="outline"

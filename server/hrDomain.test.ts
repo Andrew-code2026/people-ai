@@ -157,5 +157,86 @@ describe("Fases 2 y 3 — seguridad y documentos", () => {
       await deletePosition(4, posId);
     }
   });
+
+  it("aplica validaciones estrictas de tipo de archivo y magic bytes según allowedMimeTypes", () => {
+    const pdfBytes = new TextEncoder().encode("%PDF-1.7 test content");
+    const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46]);
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const docxBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00]);
+    const xlsxBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00]);
+
+    // 1. Requisito con Solo PDF
+    const pdfOnly = "application/pdf";
+    expect(isValidUpload("cedula.pdf", "application/pdf", 1024, pdfBytes, pdfOnly)).toBe(true);
+    expect(isValidUpload("foto.jpg", "image/jpeg", 1024, jpegBytes, pdfOnly)).toBe(false);
+    expect(isValidUpload("doc.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 1024, docxBytes, pdfOnly)).toBe(false);
+
+    // 2. Requisito con Solo Fotos
+    const photosOnly = "image/jpeg,image/png,image/webp";
+    expect(isValidUpload("cedula.pdf", "application/pdf", 1024, pdfBytes, photosOnly)).toBe(false);
+    expect(isValidUpload("foto.jpg", "image/jpeg", 1024, jpegBytes, photosOnly)).toBe(true);
+    expect(isValidUpload("foto.png", "image/png", 1024, pngBytes, photosOnly)).toBe(true);
+
+    // 3. Requisito con Word y PDF
+    const wordAndPdf = "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    expect(isValidUpload("hoja_de_vida.pdf", "application/pdf", 1024, pdfBytes, wordAndPdf)).toBe(true);
+    expect(isValidUpload("hoja_de_vida.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 1024, docxBytes, wordAndPdf)).toBe(true);
+    expect(isValidUpload("tabla.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 1024, xlsxBytes, wordAndPdf)).toBe(false);
+    expect(isValidUpload("foto.jpg", "image/jpeg", 1024, jpegBytes, wordAndPdf)).toBe(false);
+
+    // 4. Requisito con Excel y PDF
+    const excelAndPdf = "application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+    expect(isValidUpload("balance.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 1024, xlsxBytes, excelAndPdf)).toBe(true);
+    expect(isValidUpload("balance.pdf", "application/pdf", 1024, pdfBytes, excelAndPdf)).toBe(true);
+    expect(isValidUpload("carta.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 1024, docxBytes, excelAndPdf)).toBe(false);
+
+    // 5. Rechaza magic bytes falsos
+    const fakeDocx = new TextEncoder().encode("Not a zip file");
+    expect(isValidUpload("fake.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", 1024, fakeDocx, wordAndPdf)).toBe(false);
+  });
+
+  it("persiste allowedMimeTypes al crear y consultar plantillas personalizadas", async () => {
+    const { createTemplate, getTemplate } = await import("./hrDomain");
+    const templateName = `Plantilla Tipos Archivo ${Date.now()}`;
+    const items = [
+      {
+        title: "Cédula Solo PDF",
+        description: "En formato PDF únicamente",
+        required: true,
+        sortOrder: 1,
+        allowedMimeTypes: "application/pdf",
+      },
+      {
+        title: "Hoja de Vida Word o PDF",
+        description: "Word o PDF editable",
+        required: true,
+        sortOrder: 2,
+        allowedMimeTypes: "application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      },
+      {
+        title: "Prueba Técnica Excel",
+        description: "Hoja de cálculo",
+        required: false,
+        sortOrder: 3,
+        allowedMimeTypes: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    ];
+
+    const created = await createTemplate(4, templateName, items);
+    expect(created).toHaveProperty("id");
+    expect(created.items.length).toBe(3);
+    expect(created.items[0].allowedMimeTypes).toBe("application/pdf");
+    expect(created.items[1].allowedMimeTypes).toContain("wordprocessingml");
+    expect(created.items[2].allowedMimeTypes).toContain("spreadsheetml");
+
+    const fetched = await getTemplate(4, created.id);
+    if (fetched) {
+      expect(fetched.items.length).toBe(3);
+      expect(fetched.items[0].allowedMimeTypes).toBe("application/pdf");
+      expect(fetched.items[1].allowedMimeTypes).toContain("wordprocessingml");
+      expect(fetched.items[2].allowedMimeTypes).toContain("spreadsheetml");
+    }
+  });
 });
+
 

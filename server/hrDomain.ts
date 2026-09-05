@@ -8,8 +8,27 @@ import { prepareMailtoEmail } from "./emailService";
 import JSZip from "jszip";
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
-const MIME_EXTENSIONS: Record<string, string[]> = { "application/pdf": ["pdf"], "image/jpeg": ["jpg", "jpeg"], "image/png": ["png"] };
+export const ALL_SUPPORTED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+]);
+export const ALLOWED_MIME_TYPES = ALL_SUPPORTED_MIME_TYPES;
+export const MIME_EXTENSIONS: Record<string, string[]> = {
+  "application/pdf": ["pdf"],
+  "image/jpeg": ["jpg", "jpeg"],
+  "image/png": ["png"],
+  "image/webp": ["webp"],
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ["docx"],
+  "application/msword": ["doc"],
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ["xlsx"],
+  "application/vnd.ms-excel": ["xls"],
+};
 /** Reexportado desde `./tokens`, compartido con las invitaciones de empresa. */
 export const hashToken = hashOpaqueToken;
 export const hashOtp = (code: string) => createHash("sha256").update(code).digest("hex");
@@ -20,8 +39,56 @@ export const communicationAuditAction = (type: "initial" | "reminder", outcome: 
 export const isLinkUsable = isTokenUsable;
 export const getMissingRequirements = (requirements: Array<{ required: boolean; status: string }>) => requirements.filter(req => req.required && !["uploaded", "replaced", "verified"].includes(req.status));
 export const normalize = (title: string, original: string) => `${title.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]/g, "").trim()}.${original.split(".").pop()?.toLowerCase() || "bin"}`;
-export const hasMagicSignature = (bytes: Uint8Array, mimeType: string) => { if (mimeType === "application/pdf") return new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-"; if (mimeType === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff; if (mimeType === "image/png") return bytes.slice(0, 8).every((byte, index) => byte === [137, 80, 78, 71, 13, 10, 26, 10][index]); return false; };
-export const isValidUpload = (originalName: string, mimeType: string, sizeBytes: number, bytes?: Uint8Array) => { const extension = originalName.split(".").pop()?.toLowerCase() || ""; return ALLOWED_MIME_TYPES.has(mimeType) && Boolean(MIME_EXTENSIONS[mimeType]?.includes(extension)) && sizeBytes <= MAX_FILE_BYTES && (!bytes || hasMagicSignature(bytes, mimeType)); };
+export const hasMagicSignature = (bytes: Uint8Array, mimeType: string) => {
+  if (mimeType === "application/pdf") return new TextDecoder().decode(bytes.slice(0, 5)) === "%PDF-";
+  if (mimeType === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (mimeType === "image/png") return bytes.slice(0, 8).every((byte, index) => byte === [137, 80, 78, 71, 13, 10, 26, 10][index]);
+  if (mimeType === "image/webp") {
+    if (bytes.length < 12) return false;
+    const riff = new TextDecoder().decode(bytes.slice(0, 4));
+    const webp = new TextDecoder().decode(bytes.slice(8, 12));
+    return riff === "RIFF" && webp === "WEBP";
+  }
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  ) {
+    return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
+  }
+  if (mimeType === "application/msword" || mimeType === "application/vnd.ms-excel") {
+    return (
+      bytes.length >= 8 &&
+      bytes[0] === 0xd0 &&
+      bytes[1] === 0xcf &&
+      bytes[2] === 0x11 &&
+      bytes[3] === 0xe0
+    );
+  }
+  return false;
+};
+export const isValidUpload = (
+  originalName: string,
+  mimeType: string,
+  sizeBytes: number,
+  bytes?: Uint8Array,
+  allowedMimeTypes?: string | string[] | Set<string>
+) => {
+  const extension = originalName.split(".").pop()?.toLowerCase() || "";
+  if (allowedMimeTypes) {
+    const allowedSet = typeof allowedMimeTypes === "string"
+      ? new Set(allowedMimeTypes.split(",").map(s => s.trim().toLowerCase()))
+      : allowedMimeTypes instanceof Set
+      ? allowedMimeTypes
+      : new Set(allowedMimeTypes.map(s => s.toLowerCase()));
+    if (!allowedSet.has(mimeType.toLowerCase())) return false;
+  }
+  return (
+    ALLOWED_MIME_TYPES.has(mimeType) &&
+    Boolean(MIME_EXTENSIONS[mimeType]?.includes(extension)) &&
+    sizeBytes <= MAX_FILE_BYTES &&
+    (!bytes || hasMagicSignature(bytes, mimeType))
+  );
+};
 async function audit(companyId: number, action: string, metadata: Record<string, unknown>, userId?: number) { const db = await getDb(); if (db) await db.insert(auditLogs).values({ companyId, userId, action, module: "hiring", result: "success", metadata: JSON.stringify(metadata) }); }
 async function activity(companyId: number, processId: number, type: string, actorType: "analyst" | "candidate" | "system", actorUserId?: number, metadata: Record<string, unknown> = {}) { const db = await getDb(); if (db) await db.insert(processActivities).values({ companyId, processId, actorType, actorUserId, type, metadata: JSON.stringify(metadata) }); }
 const escapeHtml = (value: string) => value.replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" })[char] || char);
@@ -31,12 +98,12 @@ export const buildCandidateEmail = (detail: NonNullable<Awaited<ReturnType<typeo
 export const DEFAULT_TEMPLATE_NAME = "Expediente de Ingreso Estándar";
 
 export const DEFAULT_STANDARD_DOCUMENTS = [
-  { title: "Cédula de Ciudadanía (150%)", description: "Copia legible por ambas caras en PDF", required: true, sortOrder: 1 },
-  { title: "Hoja de Vida Actualizada", description: "Formato PDF con datos de contacto", required: true, sortOrder: 2 },
-  { title: "Certificado de Afiliación EPS", description: "No mayor a 30 días de expedición", required: true, sortOrder: 3 },
-  { title: "Certificado de Fondo de Pensiones", description: "No mayor a 30 días de expedición", required: true, sortOrder: 4 },
-  { title: "Certificaciones Académicas", description: "Títulos profesionales, actas de grado y certificaciones", required: false, sortOrder: 5 },
-  { title: "Examen Médico de Ingreso", description: "Concepto de aptitud laboral emitido por IPS autorizada", required: true, sortOrder: 6 },
+  { title: "Cédula de Ciudadanía (150%)", description: "Copia legible por ambas caras en PDF o imagen", required: true, sortOrder: 1, allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp" },
+  { title: "Hoja de Vida Actualizada", description: "Formato PDF con datos de contacto", required: true, sortOrder: 2, allowedMimeTypes: "application/pdf" },
+  { title: "Certificado de Afiliación EPS", description: "No mayor a 30 días de expedición", required: true, sortOrder: 3, allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp" },
+  { title: "Certificado de Fondo de Pensiones", description: "No mayor a 30 días de expedición", required: true, sortOrder: 4, allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp" },
+  { title: "Certificaciones Académicas", description: "Títulos profesionales, actas de grado y certificaciones", required: false, sortOrder: 5, allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp" },
+  { title: "Examen Médico de Ingreso", description: "Concepto de aptitud laboral emitido por IPS autorizada", required: true, sortOrder: 6, allowedMimeTypes: "application/pdf,image/jpeg,image/png,image/webp" },
 ];
 
 export async function listPositions(companyId: number) {
@@ -116,7 +183,7 @@ export async function deletePosition(companyId: number, positionId: number, user
 }
 export async function listTemplates(companyId: number) { const db = await getDb(); if (!db) return []; return db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.status, "active"))).orderBy(desc(documentTemplates.updatedAt)); }
 export async function getTemplate(companyId: number, templateId: number) { const db = await getDb(); if (!db) return null; const template = (await db.select().from(documentTemplates).where(and(eq(documentTemplates.companyId, companyId), eq(documentTemplates.id, templateId))).limit(1))[0]; if (!template) return null; const items = await db.select().from(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))).orderBy(asc(documentTemplateItems.sortOrder)); return { ...template, items }; }
-export async function createTemplate(companyId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, positionId?: number, userId?: number) {
+export async function createTemplate(companyId: number, name: string, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number; allowedMimeTypes?: string }>, positionId?: number, userId?: number) {
   const db = await getDb();
   if (!db) {
     return {
@@ -135,6 +202,7 @@ export async function createTemplate(companyId: number, name: string, items: Arr
         description: it.description || null,
         required: it.required,
         sortOrder: it.sortOrder,
+        allowedMimeTypes: it.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
         createdAt: new Date(),
         updatedAt: new Date(),
       })),
@@ -143,7 +211,12 @@ export async function createTemplate(companyId: number, name: string, items: Arr
   const result = await db.insert(documentTemplates).values({ companyId, positionId: positionId || null, name });
   const templateId = Number(result[0].insertId);
   if (items.length) {
-    await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId })));
+    await db.insert(documentTemplateItems).values(items.map(item => ({
+      ...item,
+      allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+      companyId,
+      templateId,
+    })));
   }
   if (positionId) {
     await db.update(jobPositions).set({ templateId, updatedAt: new Date() }).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, positionId)));
@@ -151,7 +224,23 @@ export async function createTemplate(companyId: number, name: string, items: Arr
   await audit(companyId, "document_template_created", { templateId, positionId, name }, userId);
   return getTemplate(companyId, templateId);
 }
-export async function updateTemplate(companyId: number, templateId: number, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const template = await getTemplate(companyId, templateId); if (!template) throw new Error("Template not found"); await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId))); if (items.length) await db.insert(documentTemplateItems).values(items.map(item => ({ ...item, companyId, templateId }))); await audit(companyId, "document_template_updated", { templateId }, userId); return getTemplate(companyId, templateId); }
+export async function updateTemplate(companyId: number, templateId: number, items: Array<{ title: string; description?: string; required: boolean; sortOrder: number; allowedMimeTypes?: string }>, userId?: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  const template = await getTemplate(companyId, templateId);
+  if (!template) throw new Error("Template not found");
+  await db.delete(documentTemplateItems).where(and(eq(documentTemplateItems.companyId, companyId), eq(documentTemplateItems.templateId, templateId)));
+  if (items.length) {
+    await db.insert(documentTemplateItems).values(items.map(item => ({
+      ...item,
+      allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+      companyId,
+      templateId,
+    })));
+  }
+  await audit(companyId, "document_template_updated", { templateId }, userId);
+  return getTemplate(companyId, templateId);
+}
 export async function getMasterStandardTemplate(companyId: number) {
   const db = await getDb();
   if (!db) return { items: DEFAULT_STANDARD_DOCUMENTS };
@@ -177,13 +266,14 @@ export async function getMasterStandardTemplate(companyId: number) {
       description: i.description || undefined,
       required: i.required,
       sortOrder: i.sortOrder,
+      allowedMimeTypes: i.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
     })) : DEFAULT_STANDARD_DOCUMENTS
   };
 }
 
 export async function updateMasterStandardTemplate(
   companyId: number,
-  items: Array<{ title: string; description?: string; required: boolean; sortOrder: number }>,
+  items: Array<{ title: string; description?: string; required: boolean; sortOrder: number; allowedMimeTypes?: string }>,
   applyToAllPositions = true,
   userId?: number
 ) {
@@ -193,6 +283,7 @@ export async function updateMasterStandardTemplate(
       items: items.map((item, idx) => ({
         ...item,
         sortOrder: idx + 1,
+        allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
       })),
     };
   }
@@ -212,7 +303,13 @@ export async function updateMasterStandardTemplate(
       ));
       if (items.length) {
         await db.insert(documentTemplateItems).values(
-          items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: t.id }))
+          items.map((item, idx) => ({
+            ...item,
+            sortOrder: idx + 1,
+            allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+            companyId,
+            templateId: t.id,
+          }))
         );
       }
       await db.update(documentTemplates).set({ updatedAt: new Date() }).where(eq(documentTemplates.id, t.id));
@@ -227,7 +324,13 @@ export async function updateMasterStandardTemplate(
     const tId = Number(res[0].insertId);
     if (items.length) {
       await db.insert(documentTemplateItems).values(
-        items.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId: tId }))
+        items.map((item, idx) => ({
+          ...item,
+          sortOrder: idx + 1,
+          allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+          companyId,
+          templateId: tId,
+        }))
       );
     }
   }
@@ -260,7 +363,13 @@ export async function assignDefaultTemplate(companyId: number, positionId: numbe
     });
     const templateId = Number(result[0].insertId);
     await db.insert(documentTemplateItems).values(
-      itemsToAssign.map((item, idx) => ({ ...item, sortOrder: idx + 1, companyId, templateId }))
+      itemsToAssign.map((item, idx) => ({
+        ...item,
+        allowedMimeTypes: (item as any).allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+        sortOrder: idx + 1,
+        companyId,
+        templateId,
+      }))
     );
     template = (await db.select().from(documentTemplates).where(eq(documentTemplates.id, templateId)).limit(1))[0];
   }
@@ -324,7 +433,16 @@ export async function createHiring(companyId: number, userId: number, input: { f
   const candidateId = Number(candidateResult[0].insertId);
   const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending", documentDeadline: deadlineDate });
   const processId = Number(processResult[0].insertId);
-  await db.insert(hiringRequirements).values(template.items.map(item => ({ companyId, processId, sourceTemplateItemId: item.id, title: item.title, description: item.description, required: item.required, sortOrder: item.sortOrder })));
+  await db.insert(hiringRequirements).values(template.items.map(item => ({
+    companyId,
+    processId,
+    sourceTemplateItemId: item.id,
+    title: item.title,
+    description: item.description,
+    required: item.required,
+    sortOrder: item.sortOrder,
+    allowedMimeTypes: item.allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp",
+  })));
   await audit(companyId, "hiring_process_created", { processId, candidateId, documentDeadline: deadlineDate }, userId);
   return getHiringDetail(companyId, processId);
 }
@@ -349,7 +467,27 @@ export async function getHiringDetail(companyId: number, processId: number) { co
 export async function updateRequirement(companyId: number, processId: number, requirementId: number, patch: { title?: string; required?: boolean; status?: "pending" | "uploaded" | "replaced" | "removed" | "verified" }, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(hiringRequirements).set(patch).where(and(eq(hiringRequirements.companyId, companyId), eq(hiringRequirements.processId, processId), eq(hiringRequirements.id, requirementId))); await audit(companyId, "hiring_requirement_updated", { processId, requirementId }, userId); return getHiringDetail(companyId, processId); }
 export async function generateLink(companyId: number, processId: number, userId?: number) { const db = await getDb(); if (!db) throw new Error("Database unavailable"); const detail = await getHiringDetail(companyId, processId); if (!detail) throw new Error("Hiring process not found"); await db.update(candidateAccessLinks).set({ status: "revoked", revokedAt: new Date() }).where(and(eq(candidateAccessLinks.companyId, companyId), eq(candidateAccessLinks.processId, processId), eq(candidateAccessLinks.status, "active"))); const token = randomBytes(32).toString("base64url"); await db.insert(candidateAccessLinks).values({ companyId, processId, candidateId: detail.process.candidateId, tokenHash: hashToken(token), expiresAt: new Date(Date.now() + 7 * 86400000) }); await audit(companyId, "candidate_link_generated", { processId }, userId); await activity(companyId, processId, "link_generated", "analyst", userId); return { token, expiresAt: new Date(Date.now() + 7 * 86400000) }; }
 export async function getPortal(token: string, recordActivity = true) { const db = await getDb(); if (!db) return null; const link = (await db.select().from(candidateAccessLinks).where(eq(candidateAccessLinks.tokenHash, hashToken(token))).limit(1))[0]; if (!link) return null; if (!isLinkUsable(link.status, link.expiresAt)) { if (link.status === "active" && link.expiresAt.getTime() < Date.now()) { await audit(link.companyId, "candidate_link_expired", { processId: link.processId, linkId: link.id }); await activity(link.companyId, link.processId, "link_expired", "system", undefined, { linkId: link.id }); } return null; } await db.update(candidateAccessLinks).set({ lastUsedAt: new Date() }).where(eq(candidateAccessLinks.id, link.id)); const detail = await getHiringDetail(link.companyId, link.processId); if (detail && recordActivity) { await activity(link.companyId, link.processId, "link_opened", "candidate"); await audit(link.companyId, "candidate_link_opened", { processId: link.processId, linkId: link.id }); } return detail ? { ...detail, linkId: link.id, expiresAt: link.expiresAt } : null; }
-export async function uploadPortalDocument(token: string, requirementId: number, originalName: string, mimeType: string, bytes: Uint8Array) { if (!isValidUpload(originalName, mimeType, bytes.byteLength, bytes)) throw new Error("Archivo inválido: formato, contenido o tamaño no permitido"); const portal = await getPortal(token, false); if (!portal) throw new Error("Enlace no disponible"); const requirement = portal.requirements.find(item => item.id === requirementId); if (!requirement) throw new Error("Requisito no encontrado"); const normalizedName = normalize(requirement.title, originalName); const key = `candidate-documents/${portal.process.companyId}/${portal.process.id}/${requirement.id}-${randomBytes(12).toString("hex")}-${normalizedName}`; const stored = await storagePut(key, Buffer.from(bytes), mimeType); const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(candidateDocuments).set({ status: "removed" }).where(and(eq(candidateDocuments.companyId, portal.process.companyId), eq(candidateDocuments.requirementId, requirementId), eq(candidateDocuments.processId, portal.process.id), eq(candidateDocuments.status, "active"))); await db.insert(candidateDocuments).values({ companyId: portal.process.companyId, processId: portal.process.id, requirementId, originalName, normalizedName, fileKey: stored.key, mimeType, sizeBytes: bytes.byteLength }); await db.update(hiringRequirements).set({ status: "uploaded" }).where(and(eq(hiringRequirements.companyId, portal.process.companyId), eq(hiringRequirements.id, requirementId))); await audit(portal.process.companyId, "candidate_document_uploaded", { processId: portal.process.id, requirementId, normalizedName }); await activity(portal.process.companyId, portal.process.id, "document_uploaded", "candidate", undefined, { requirementId }); return getPortal(token); }
+export async function uploadPortalDocument(token: string, requirementId: number, originalName: string, mimeType: string, bytes: Uint8Array) {
+  const portal = await getPortal(token, false);
+  if (!portal) throw new Error("Enlace no disponible");
+  const requirement = portal.requirements.find(item => item.id === requirementId);
+  if (!requirement) throw new Error("Requisito no encontrado");
+  const allowedTypes = (requirement as any).allowedMimeTypes || "application/pdf,image/jpeg,image/png,image/webp";
+  if (!isValidUpload(originalName, mimeType, bytes.byteLength, bytes, allowedTypes)) {
+    throw new Error("Archivo inválido: formato no admitido para este requisito o tamaño no permitido");
+  }
+  const normalizedName = normalize(requirement.title, originalName);
+  const key = `candidate-documents/${portal.process.companyId}/${portal.process.id}/${requirement.id}-${randomBytes(12).toString("hex")}-${normalizedName}`;
+  const stored = await storagePut(key, Buffer.from(bytes), mimeType);
+  const db = await getDb();
+  if (!db) throw new Error("Database unavailable");
+  await db.update(candidateDocuments).set({ status: "removed" }).where(and(eq(candidateDocuments.companyId, portal.process.companyId), eq(candidateDocuments.requirementId, requirementId), eq(candidateDocuments.processId, portal.process.id), eq(candidateDocuments.status, "active")));
+  await db.insert(candidateDocuments).values({ companyId: portal.process.companyId, processId: portal.process.id, requirementId, originalName, normalizedName, fileKey: stored.key, mimeType, sizeBytes: bytes.byteLength });
+  await db.update(hiringRequirements).set({ status: "uploaded" }).where(and(eq(hiringRequirements.companyId, portal.process.companyId), eq(hiringRequirements.id, requirementId)));
+  await audit(portal.process.companyId, "candidate_document_uploaded", { processId: portal.process.id, requirementId, normalizedName });
+  await activity(portal.process.companyId, portal.process.id, "document_uploaded", "candidate", undefined, { requirementId });
+  return getPortal(token);
+}
 export async function removePortalDocument(token: string, requirementId: number) { const portal = await getPortal(token, false); if (!portal) throw new Error("Enlace no disponible"); const db = await getDb(); if (!db) throw new Error("Database unavailable"); await db.update(candidateDocuments).set({ status: "removed" }).where(and(eq(candidateDocuments.companyId, portal.process.companyId), eq(candidateDocuments.processId, portal.process.id), eq(candidateDocuments.requirementId, requirementId), eq(candidateDocuments.status, "active"))); await db.update(hiringRequirements).set({ status: "removed" }).where(and(eq(hiringRequirements.companyId, portal.process.companyId), eq(hiringRequirements.processId, portal.process.id), eq(hiringRequirements.id, requirementId))); await audit(portal.process.companyId, "candidate_document_removed", { processId: portal.process.id, requirementId }); await activity(portal.process.companyId, portal.process.id, "document_removed", "candidate", undefined, { requirementId }); return getPortal(token); }
 export async function listNotifications(companyId: number, recipientUserId: number) { const db = await getDb(); if (!db) return []; return db.select().from(internalNotifications).where(and(eq(internalNotifications.companyId, companyId), eq(internalNotifications.recipientUserId, recipientUserId))).orderBy(desc(internalNotifications.createdAt)); }
 export async function getDocumentUrl(companyId: number, processId: number, documentId: number) { const db = await getDb(); if (!db) return null; const document = (await db.select().from(candidateDocuments).where(and(eq(candidateDocuments.companyId, companyId), eq(candidateDocuments.processId, processId), eq(candidateDocuments.id, documentId), eq(candidateDocuments.status, "active"))).limit(1))[0]; return document ? storageGetSignedUrl(document.fileKey) : null; }
