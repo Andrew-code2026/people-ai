@@ -14,7 +14,7 @@ services:
     # Misma region que el cluster TiDB (us-east-1): menos latencia por consulta,
     # que con el arranque en frio del plan gratuito se nota.
     region: virginia
-    branch: feat/despliegue-render
+    branch: main
     # Sin `--prod`: el build necesita vite, esbuild y typescript. pnpm es
     # obligatorio (patch de wouter y overrides en package.json); corepack lo
     # instala en la version que fija `packageManager`.
