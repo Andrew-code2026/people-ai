@@ -508,6 +508,12 @@ export default function HiringDetailPage() {
             <p className="mt-2 text-sm text-slate-500">
               {position?.name} · {company?.name}
             </p>
+            {process.documentDeadline && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                <Clock3 className="h-3.5 w-3.5" />
+                Fecha límite de entrega: {new Date(process.documentDeadline).toLocaleDateString("es-CO", { dateStyle: "long" })}
+              </p>
+            )}
           </div>
           <Badge
             variant="outline"

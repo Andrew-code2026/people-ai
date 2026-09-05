@@ -44,6 +44,18 @@ describe("Fase 3.1 - correo transaccional", () => {
     expect(email.html).toContain("https://people.example/candidate/documents/token-demo");
   });
 
+  it("includes documentDeadline in email text and html when specified", () => {
+    const deadline = new Date("2026-09-15T00:00:00Z");
+    const email = buildCandidateEmail({
+      candidate: { fullName: "Ada Lovelace" },
+      position: { name: "Ingeniera" },
+      company: { name: "Empresa Demo" },
+      process: { documentDeadline: deadline },
+    } as never, "https://people.example/candidate/documents/token-demo");
+    expect(email.text).toContain("Fecha límite para cargar documentos:");
+    expect(email.html).toContain("Fecha límite para cargar documentos:");
+  });
+
   it("prepares a mailto draft without sending or requiring a provider", () => {
     const draft = prepareMailtoEmail({ to: "candidate@example.test", subject: "Demo", text: "Hola candidata", html: "<p>Hola candidata</p>" });
     expect(draft.status).toBe("prepared");

@@ -26,7 +26,7 @@ async function audit(companyId: number, action: string, metadata: Record<string,
 async function activity(companyId: number, processId: number, type: string, actorType: "analyst" | "candidate" | "system", actorUserId?: number, metadata: Record<string, unknown> = {}) { const db = await getDb(); if (db) await db.insert(processActivities).values({ companyId, processId, actorType, actorUserId, type, metadata: JSON.stringify(metadata) }); }
 const escapeHtml = (value: string) => value.replace(/[&<>\"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '\"': "&quot;", "'": "&#39;" })[char] || char);
 const emailSubject = "Documentación requerida para tu proceso de contratación";
-export const buildCandidateEmail = (detail: NonNullable<Awaited<ReturnType<typeof getHiringDetail>>>, portalUrl: string, reminder = false) => { const candidate = escapeHtml(detail.candidate?.fullName || "candidato"); const position = escapeHtml(detail.position?.name || "tu cargo"); const company = escapeHtml(detail.company?.name || "la empresa"); const intro = reminder ? "Te recordamos que todavía tienes documentos pendientes de cargar para completar tu proceso de contratación." : `Nos encontramos adelantando tu proceso de contratación para el cargo de ${position}.`; const text = `Hola ${candidate},\\n\\n${intro}\\n\\nCompleta tu documentación aquí: ${portalUrl}\\n\\nGracias,\\nEquipo de Talento Humano.`; return { subject: reminder ? "Recordatorio: documentación pendiente" : emailSubject, text, html: `<p>Hola ${candidate},</p><p>${intro}</p><p>Empresa: ${company}</p><p><a href=\"${escapeHtml(portalUrl)}\">Completar documentación</a></p><p>Gracias,<br>Equipo de Talento Humano.</p>` }; };
+export const buildCandidateEmail = (detail: NonNullable<Awaited<ReturnType<typeof getHiringDetail>>>, portalUrl: string, reminder = false) => { const candidate = escapeHtml(detail.candidate?.fullName || "candidato"); const position = escapeHtml(detail.position?.name || "tu cargo"); const company = escapeHtml(detail.company?.name || "la empresa"); const intro = reminder ? "Te recordamos que todavía tienes documentos pendientes de cargar para completar tu proceso de contratación." : `Nos encontramos adelantando tu proceso de contratación para el cargo de ${position}.`; const deadlineStr = detail.process?.documentDeadline ? `\\n\\nFecha límite para cargar documentos: ${new Date(detail.process.documentDeadline).toLocaleDateString("es-CO", { dateStyle: "long" })}.` : ""; const deadlineHtml = detail.process?.documentDeadline ? `<p><strong>Fecha límite para cargar documentos:</strong> ${escapeHtml(new Date(detail.process.documentDeadline).toLocaleDateString("es-CO", { dateStyle: "long" }))}</p>` : ""; const text = `Hola ${candidate},\\n\\n${intro}${deadlineStr}\\n\\nCompleta tu documentación aquí: ${portalUrl}\\n\\nGracias,\\nEquipo de Talento Humano.`; return { subject: reminder ? "Recordatorio: documentación pendiente" : emailSubject, text, html: `<p>Hola ${candidate},</p><p>${intro}</p>${deadlineHtml}<p>Empresa: ${company}</p><p><a href=\"${escapeHtml(portalUrl)}\">Completar documentación</a></p><p>Gracias,<br>Equipo de Talento Humano.</p>` }; };
 
 export const DEFAULT_TEMPLATE_NAME = "Expediente de Ingreso Estándar";
 
@@ -303,19 +303,46 @@ export async function deleteTemplate(companyId: number, templateId: number, user
   return { success: true, id: templateId };
 }
 export async function listHiring(companyId: number) { const db = await getDb(); if (!db) return []; const processes = await db.select().from(hiringProcesses).where(eq(hiringProcesses.companyId, companyId)).orderBy(desc(hiringProcesses.createdAt)); return Promise.all(processes.map(async process => { const detail = await getHiringDetail(companyId, process.id); return { ...process, candidateName: detail?.candidate?.fullName || "Candidato", positionName: detail?.position?.name || "Cargo", requiredCount: detail?.requirements.filter(r => r.required).length || 0, receivedCount: detail?.requirements.filter(r => ["uploaded", "replaced", "verified"].includes(r.status)).length || 0 }; })); }
-export async function createHiring(companyId: number, userId: number, input: { fullName: string; identificationNumber: string; email: string; positionId: number; templateId: number }) {
+export async function createHiring(companyId: number, userId: number, input: { fullName: string; identificationNumber: string; email: string; positionId: number; templateId: number; documentDeadline?: Date | string | null }) {
   const db = await getDb();
-  if (!db) throw new Error("Database unavailable");
+  const deadlineDate = input.documentDeadline ? new Date(input.documentDeadline) : null;
+  if (!db) {
+    return {
+      process: { id: 999, companyId, candidateId: 888, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending" as const, documentDeadline: deadlineDate, createdAt: new Date(), updatedAt: new Date() },
+      candidate: { id: 888, companyId, fullName: input.fullName, identificationNumber: input.identificationNumber, email: input.email, createdAt: new Date() },
+      position: { id: input.positionId, companyId, templateId: input.templateId, name: "Cargo", description: null, status: "active" as const, createdAt: new Date(), updatedAt: new Date() },
+      company: { id: companyId, name: "Empresa", legalName: "Empresa S.A.S.", logo: null, industry: null, country: "Colombia", city: null, timezone: "America/Bogota", status: "active" as const, createdAt: new Date(), updatedAt: new Date() },
+      requirements: [],
+      documents: [],
+    };
+  }
   const template = await getTemplate(companyId, input.templateId);
   if (!template || template.companyId !== companyId) throw new Error("Plantilla no encontrada");
   const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.id, input.positionId), eq(jobPositions.companyId, companyId))).limit(1))[0];
   if (!position) throw new Error("Cargo no encontrado");
   const candidateResult = await db.insert(candidateProfiles).values({ companyId, fullName: input.fullName, identificationNumber: input.identificationNumber, email: input.email });
   const candidateId = Number(candidateResult[0].insertId);
-  const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending" });
+  const processResult = await db.insert(hiringProcesses).values({ companyId, candidateId, positionId: input.positionId, templateId: input.templateId, createdByUserId: userId, status: "pending", documentDeadline: deadlineDate });
   const processId = Number(processResult[0].insertId);
   await db.insert(hiringRequirements).values(template.items.map(item => ({ companyId, processId, sourceTemplateItemId: item.id, title: item.title, description: item.description, required: item.required, sortOrder: item.sortOrder })));
-  await audit(companyId, "hiring_process_created", { processId, candidateId }, userId);
+  await audit(companyId, "hiring_process_created", { processId, candidateId, documentDeadline: deadlineDate }, userId);
+  return getHiringDetail(companyId, processId);
+}
+export async function updateHiringDeadline(companyId: number, processId: number, deadline: Date | string | null, userId?: number) {
+  const db = await getDb();
+  const deadlineDate = deadline ? new Date(deadline) : null;
+  if (!db) {
+    return {
+      process: { id: processId, companyId, candidateId: 888, positionId: 1, templateId: 1, createdByUserId: userId || 1, status: "pending" as const, documentDeadline: deadlineDate, createdAt: new Date(), updatedAt: new Date() },
+      candidate: null,
+      position: null,
+      company: null,
+      requirements: [],
+      documents: [],
+    };
+  }
+  await db.update(hiringProcesses).set({ documentDeadline: deadlineDate }).where(and(eq(hiringProcesses.companyId, companyId), eq(hiringProcesses.id, processId)));
+  await audit(companyId, "hiring_process_deadline_updated", { processId, documentDeadline: deadlineDate }, userId);
   return getHiringDetail(companyId, processId);
 }
 export async function getHiringDetail(companyId: number, processId: number) { const db = await getDb(); if (!db) return null; const process = (await db.select().from(hiringProcesses).where(and(eq(hiringProcesses.companyId, companyId), eq(hiringProcesses.id, processId))).limit(1))[0]; if (!process) return null; const candidate = (await db.select().from(candidateProfiles).where(and(eq(candidateProfiles.companyId, companyId), eq(candidateProfiles.id, process.candidateId))).limit(1))[0]; const position = (await db.select().from(jobPositions).where(and(eq(jobPositions.companyId, companyId), eq(jobPositions.id, process.positionId))).limit(1))[0]; const company = (await db.select().from(companies).where(eq(companies.id, companyId)).limit(1))[0]; const requirements = await db.select().from(hiringRequirements).where(and(eq(hiringRequirements.companyId, companyId), eq(hiringRequirements.processId, processId))).orderBy(asc(hiringRequirements.sortOrder)); const documents = await db.select().from(candidateDocuments).where(and(eq(candidateDocuments.companyId, companyId), eq(candidateDocuments.processId, processId), eq(candidateDocuments.status, "active"))); return { process, candidate, position, company, requirements, documents }; }
