@@ -72,6 +72,22 @@ export async function getDb() {
         connection: {
           uri: process.env.DATABASE_URL,
           ssl: getDbSsl(process.env.DATABASE_URL),
+          // Ajustes del pool para TiDB Cloud. `maxIdle` DEBE ser estrictamente
+          // menor que `connectionLimit`: mysql2 solo arranca el recolector de
+          // conexiones ociosas si se cumple esa desigualdad (mysql2/lib/base/pool.js),
+          // y por defecto `maxIdle` hereda el mismo valor que `connectionLimit`, asi
+          // que la condicion era falsa, el recolector nunca se creaba e `idleTimeout`
+          // era codigo muerto. El endpoint publico de TiDB en AWS corta las
+          // conexiones ociosas en silencio a los 340 s, con lo que la primera
+          // peticion tras un rato de calma sacaba del pool un socket ya muerto y
+          // moria con ECONNRESET. Con maxIdle 2 < connectionLimit 5 el recolector
+          // existe e `idleTimeout` (60 s, muy por debajo de esos 340 s) se aplica.
+          connectionLimit: 5,
+          maxIdle: 2,
+          idleTimeout: 60_000,
+          // Con la base caida, fallar rapido en vez de colgar la primera peticion
+          // hasta el timeout del sistema operativo.
+          connectTimeout: 10_000,
         },
       });
       await ensureSchema(_db);
