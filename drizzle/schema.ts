@@ -186,7 +186,7 @@ export const hiringProcesses = mysqlTable("hiring_processes", {
 }, (table) => ({ companyIdx: index("hiring_company_idx").on(table.companyId), candidateIdx: index("hiring_candidate_idx").on(table.candidateId) }));
 
 export const hiringRequirements = mysqlTable("hiring_requirements", {
-  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), sourceTemplateItemId: int("sourceTemplateItemId"), title: varchar("title", { length: 180 }).notNull(), description: text("description"), required: boolean("required").default(true).notNull(), sortOrder: int("sortOrder").default(0).notNull(), status: mysqlEnum("status", ["pending", "uploaded", "replaced", "removed", "verified"]).default("pending").notNull(),
+  id: int("id").autoincrement().primaryKey(), companyId: int("companyId").notNull(), processId: int("processId").notNull(), sourceTemplateItemId: int("sourceTemplateItemId"), title: varchar("title", { length: 180 }).notNull(), description: text("description"), required: boolean("required").default(true).notNull(), sortOrder: int("sortOrder").default(0).notNull(), status: mysqlEnum("status", ["pending", "uploaded", "replaced", "removed", "verified"]).default("pending").notNull(), allowedMimeTypes: varchar("allowedMimeTypes", { length: 300 }).default("application/pdf,image/jpeg,image/png,image/webp"),
 }, (table) => ({ companyIdx: index("requirements_company_idx").on(table.companyId), processIdx: index("requirements_process_idx").on(table.processId) }));
 
 export const candidateAccessLinks = mysqlTable("candidate_access_links", {
