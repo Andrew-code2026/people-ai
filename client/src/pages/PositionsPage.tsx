@@ -30,7 +30,6 @@ import {
   CheckCircle2,
   Search,
   ShieldCheck,
-  Layers,
   Clock,
   AlertCircle,
   Pencil,
@@ -698,14 +697,10 @@ export default function PositionsPage() {
 
             <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end">
               <div>
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-700">
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                    Plantilla Maestra Corporativa
-                  </span>
-                  <span className="text-xs text-slate-400">· Configuración Global</span>
-                </div>
-                <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+                  Plantilla Maestra Corporativa
+                </p>
+                <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
                   Plantilla Estándar de la Empresa
                 </h1>
                 <p className="mt-1 text-sm text-slate-500 max-w-3xl">
@@ -1150,13 +1145,10 @@ export default function PositionsPage() {
         {/* Top Header */}
         <div className="flex flex-col justify-between gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-end">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider text-blue-700">
-                <Layers className="h-3.5 w-3.5" />
-                Configuración Operativa
-              </span>
-            </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
+              Configuración Operativa
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
               Cargos y Plantillas de Documentos
             </h1>
             <p className="mt-1 text-sm text-slate-500">

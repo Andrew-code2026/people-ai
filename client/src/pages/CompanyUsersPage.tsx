@@ -75,7 +75,7 @@ export default function CompanyUsersPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Equipo</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight">Usuarios de la empresa</h1>

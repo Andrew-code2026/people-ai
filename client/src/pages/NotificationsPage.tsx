@@ -25,7 +25,7 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout roleOverride="HR">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">
             Centro de actividad
