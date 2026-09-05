@@ -78,7 +78,7 @@ export default function HRDashboard() {
 
   return (
     <DashboardLayout roleOverride="HR">
-      <div className="mx-auto max-w-7xl space-y-7">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight text-slate-950">{getGreeting()}, {displayName}</h1>
           <p className="mt-2 text-sm text-slate-500">Este es el centro de gestión de Talento Humano de PEOPLE AI.</p>

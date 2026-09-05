@@ -35,7 +35,7 @@ export default function HiringPage() {
   const rows = hiring.data?.filter(row => (statusFilter === "all" || row.status === statusFilter) && (positionFilter === "all" || String(row.positionId) === positionFilter)) || [];
   return (
     <DashboardLayout roleOverride="HR">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Talento Humano</p>

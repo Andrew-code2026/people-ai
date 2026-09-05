@@ -19,7 +19,7 @@ export default function RoleDashboard({ expectedRole }: { expectedRole: RoleKey 
   const isWrongRole = Boolean(access && access.role !== expectedRole && access.role !== "SUPER_ADMIN");
 
   return <DashboardLayout>
-    <div className="mx-auto max-w-6xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-600">Área protegida</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Dashboard de {ROLE_LABELS[expectedRole]}</h1><p className="mt-2 text-sm text-muted-foreground">Los datos están filtrados por el contexto empresarial validado en backend.</p></div><Badge variant="outline" className="w-fit border-teal-200 bg-teal-50 text-teal-700">Sesión segura · {expectedRole}</Badge></div>
       {accessQuery.isLoading && <Card><CardContent className="space-y-3 p-6"><Skeleton className="h-6 w-48" /><Skeleton className="h-4 w-72" /><Skeleton className="h-20 w-full" /></CardContent></Card>}
       {accessQuery.error && <Card className="border-amber-200 bg-amber-50"><CardContent className="flex items-center gap-3 p-6 text-amber-800"><AlertCircle className="h-5 w-5" /><div><p className="font-medium">No hay una sesión empresarial activa</p><p className="text-sm">Inicia sesión desde la pantalla principal para acceder al dashboard.</p></div></CardContent></Card>}

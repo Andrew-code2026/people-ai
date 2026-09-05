@@ -490,7 +490,7 @@ export default function HiringDetailPage() {
 
   return (
     <DashboardLayout roleOverride="HR">
-      <div className="mx-auto max-w-6xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <button
           onClick={() => history.back()}
           className="flex items-center text-sm text-slate-500 hover:text-slate-900"
