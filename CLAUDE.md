@@ -11,15 +11,15 @@ El resto de este archivo esta en espanol, igual que los comentarios, los docs y 
 Se requiere **pnpm**: hay un parche (`patches/wouter@3.7.1.patch`) y un `overrides` de `nanoid`
 declarados en `package.json`; con npm o yarn el parche no se aplica.
 
-| Comando        | Que hace                                                                                                             |
-| -------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`     | `tsx watch server/_core/index.ts` — Express con Vite en middleware, puerto 3000 (escanea hasta 3019 si esta ocupado) |
-| `pnpm build`   | `vite build` → `dist/public` + esbuild del server → `dist`                                                           |
-| `pnpm start`   | Produccion: `node dist/index.js`                                                                                     |
-| `pnpm check`   | `tsc --noEmit`                                                                                                       |
-| `pnpm test`    | `vitest run`                                                                                                         |
-| `pnpm format`  | `prettier --write .`                                                                                                 |
-| `pnpm db:push` | `drizzle-kit generate` + `drizzle-kit migrate`                                                                       |
+| Comando        | Que hace                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `pnpm dev`     | `tsx watch server/_core/dev.ts` — Express con Vite en middleware, puerto 3000 (escanea hasta 3019 si esta ocupado) |
+| `pnpm build`   | `vite build` → `dist/public` + esbuild del server → `dist`                                                         |
+| `pnpm start`   | Produccion: `node dist/index.js`                                                                                   |
+| `pnpm check`   | `tsc --noEmit`                                                                                                     |
+| `pnpm test`    | `vitest run`                                                                                                       |
+| `pnpm format`  | `prettier --write .`                                                                                               |
+| `pnpm db:push` | `drizzle-kit generate` + `drizzle-kit migrate`                                                                     |
 
 Test individual:
 
@@ -37,9 +37,16 @@ Cosas que no se deducen del `package.json`:
   un modulo de cliente.
 - `tsconfig.json` excluye `**/*.test.ts`, asi que `pnpm check` no tipa los tests.
 - El server no arranca sin `JWT_SECRET` de >=32 chars: `assertAuthEnvReady()` es lo primero que corre
-  en `server/_core/index.ts`, y `server/auth.ts:77` mantiene en lista negra el placeholder publicado
+  en `createApp()` (`server/_core/app.ts`), y `server/auth.ts:77` mantiene en lista negra el placeholder publicado
   `super_secret_local_jwt_key_123456`. Generar con `openssl rand -hex 32`.
 - `server/seed.ts` exporta `seedDemoData()` pero **nadie la llama** y no existe script `db:seed`.
+- **Dos entradas del servidor.** `server/_core/dev.ts` (`pnpm dev`: Vite en middleware + escaneo de
+  puertos) e `index.ts` (`pnpm build`/`start`: solo `serveStatic`). Comparten `createApp()` en `app.ts`.
+  `index.ts` no puede importar `./vite`: lo garantiza el grafo de modulos y lo vigila
+  `server/deploy.contract.test.ts`. Antes una sola entrada arrastraba vite y sus plugins
+  (devDependencies) al bundle de produccion.
+- `render.yaml` despliega en Render Free contra TiDB Cloud. El health check es `GET /healthz` (en
+  `app.ts`, a proposito sin tocar la base). Ver los comentarios del propio archivo.
 
 ## Arquitectura
 
@@ -55,15 +62,15 @@ client/src/pages/*.tsx
   → server/db.ts (drizzle)        → MySQL
 ```
 
-| Ruta                             | Responsabilidad                                                                                                                                                           |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `server/routers.ts`              | Router unico + validacion zod **inline**. No hay carpeta `schemas/`.                                                                                                      |
-| `server/authorization.ts`        | Matrices RBAC (`ROLE_PERMISSIONS`, `INVITABLE_ROLES`) y los asserts.                                                                                                      |
-| `server/db.ts`                   | Singleton de drizzle + helpers de consulta.                                                                                                                               |
-| `drizzle/schema.ts`              | **Fuente de verdad** del esquema _y_ de los tipos, incluido `RoleKey`. No hay `database.types.ts` que regenerar: editar este archivo actualiza ambos lados.               |
-| `shared/extensions.ts`           | Puertos (`AIProvider`, `LlmProvider`, `DocumentStoragePort`, `TenantContext`).                                                                                            |
-| `client/src/components/ui/`      | shadcn/ui — no editar a mano.                                                                                                                                             |
-| `server/_core/`, `shared/_core/` | Andamiaje vendido de la plantilla Manus. `heartbeat.ts`, `map.ts`, `imageGeneration.ts`, `voiceTranscription.ts` no se usan. **No tomarlo como convencion del proyecto.** |
+| Ruta                             | Responsabilidad                                                                                                                                                                                                                                                                       |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/routers.ts`              | Router unico + validacion zod **inline**. No hay carpeta `schemas/`.                                                                                                                                                                                                                  |
+| `server/authorization.ts`        | Matrices RBAC (`ROLE_PERMISSIONS`, `INVITABLE_ROLES`) y los asserts.                                                                                                                                                                                                                  |
+| `server/db.ts`                   | Singleton de drizzle + helpers de consulta.                                                                                                                                                                                                                                           |
+| `drizzle/schema.ts`              | **Fuente de verdad** del esquema _y_ de los tipos, incluido `RoleKey`. No hay `database.types.ts` que regenerar: editar este archivo actualiza ambos lados.                                                                                                                           |
+| `shared/extensions.ts`           | Puertos (`AIProvider`, `LlmProvider`, `DocumentStoragePort`, `TenantContext`).                                                                                                                                                                                                        |
+| `client/src/components/ui/`      | shadcn/ui — no editar a mano.                                                                                                                                                                                                                                                         |
+| `server/_core/`, `shared/_core/` | Andamiaje vendido de la plantilla Manus. `heartbeat.ts`, `map.ts`, `imageGeneration.ts`, `voiceTranscription.ts` no se usan. **No tomarlo como convencion del proyecto.** Excepcion: `app.ts`, `dev.ts`, `index.ts` y `static.ts` son el arranque propio del proyecto (ver Comandos). |
 
 Aliases: `@/*` → `client/src/*`, `@shared/*` → `shared/*`. **No existe alias para `server/` ni
 `drizzle/`**, de ahi los imports relativos largos desde el cliente.
